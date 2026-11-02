@@ -1,0 +1,20 @@
+import { Schema, models, model, type InferSchemaType } from "mongoose";
+
+const SupplierSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    contactPerson: { type: String },
+    email: { type: String, lowercase: true },
+    phone: { type: String, required: true },
+    address: { type: String },
+    notes: { type: String },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+
+export type SupplierDocument = InferSchemaType<typeof SupplierSchema> & {
+  _id: Schema.Types.ObjectId;
+};
+
+export const Supplier = models.Supplier || model("Supplier", SupplierSchema);

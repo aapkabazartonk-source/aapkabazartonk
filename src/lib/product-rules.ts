@@ -1,7 +1,10 @@
 import { Types } from "mongoose";
 import { Category } from "@/models/Category";
+import { InventoryLog } from "@/models/InventoryLog";
 import { Order } from "@/models/Order";
 import { Product } from "@/models/Product";
+import { Purchase } from "@/models/Purchase";
+import { StockAdjustment } from "@/models/StockAdjustment";
 
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
@@ -64,8 +67,13 @@ export async function assertValidCategoryRefs(
 }
 
 export async function productHasTransactionReferences(productId: string) {
-  const orderRef = await Order.exists({ "items.product": productId });
-  return Boolean(orderRef);
+  const [orderRef, purchaseRef, logRef, adjustmentRef] = await Promise.all([
+    Order.exists({ "items.product": productId }),
+    Purchase.exists({ "items.product": productId }),
+    InventoryLog.exists({ product: productId }),
+    StockAdjustment.exists({ product: productId }),
+  ]);
+  return Boolean(orderRef || purchaseRef || logRef || adjustmentRef);
 }
 
 export async function assertUniqueSku(sku: string, excludeId?: string) {

@@ -4,3 +4,6 @@ export { Product } from "./Product";
 export { Customer } from "./Customer";
 export { Supplier } from "./Supplier";
 export { Order } from "./Order";
+export { InventoryLog } from "./InventoryLog";
+export { StockAdjustment } from "./StockAdjustment";
+export { Purchase } from "./Purchase";

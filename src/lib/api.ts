@@ -28,6 +28,20 @@ export function handleApiError(error: unknown) {
   if (
     typeof error === "object" &&
     error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "InventoryError" &&
+    "status" in error &&
+    "message" in error
+  ) {
+    return jsonError(
+      String((error as { message: string }).message),
+      Number((error as { status: number }).status) || 400,
+    );
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
     "code" in error &&
     (error as { code?: number }).code === 11000
   ) {
@@ -40,6 +54,8 @@ export function handleApiError(error: unknown) {
       slug: "Slug",
       normalizedName: "Category name",
       name: "Name",
+      adjustmentNumber: "Adjustment number",
+      purchaseNumber: "Purchase number",
     };
     return jsonError(
       `${labels[field] ?? field} already exists. Please use a unique value.`,

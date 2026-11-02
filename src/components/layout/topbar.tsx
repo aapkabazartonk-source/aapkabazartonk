@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ interface TopbarProps {
   onMenuClick: () => void;
 }
 
-function getGreeting(date = new Date()) {
+function getGreeting(date: Date) {
   const hour = date.getHours();
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
@@ -31,18 +31,18 @@ function SmilingFace() {
         cx="9"
         cy="10"
         r="1.25"
-        className="animate-smile-blink fill-foreground"
+        className="animate-smile-blink fill-white"
       />
       <circle
         cx="15"
         cy="10"
         r="1.25"
-        className="animate-smile-blink fill-foreground"
+        className="animate-smile-blink fill-white"
         style={{ animationDelay: "0.08s" }}
       />
       <path
         d="M9.5 15c1.8 1.8 5.2 1.8 7 0"
-        className="animate-smile-widen stroke-foreground"
+        className="animate-smile-widen stroke-white"
         strokeWidth="1.7"
         strokeLinecap="round"
         fill="none"
@@ -52,10 +52,14 @@ function SmilingFace() {
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
-  const greeting = useMemo(() => getGreeting(), []);
+  const [greeting, setGreeting] = useState("Welcome");
+
+  useEffect(() => {
+    setGreeting(getGreeting(new Date()));
+  }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-border bg-card px-4 sm:px-6">
+    <header className="sticky top-2 z-30 mx-2 mt-2 flex h-[72px] items-center gap-3 rounded-2xl border border-border bg-card px-4 shadow-[var(--shadow-sm)] sm:px-6">
       <Button
         type="button"
         variant="ghost"

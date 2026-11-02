@@ -7,6 +7,7 @@ import {
   jsonOk,
   parsePagination,
 } from "@/lib/api";
+import { createProductWithOpeningStock } from "@/lib/inventory-stock";
 import {
   assertUniqueBarcode,
   assertUniqueSku,
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
 
     const images = (parsed.images ?? []).filter((url) => url.trim().length > 0);
 
-    const product = await Product.create({
+    const productData = {
       name: parsed.name.trim(),
       sku: parsed.sku,
       barcode: (parsed.barcode ?? "").trim(),
@@ -179,12 +180,24 @@ export async function POST(request: Request) {
         : null,
       purchasePrice: parsed.purchasePrice,
       sellingPrice: parsed.sellingPrice,
-      currentStock: parsed.currentStock,
       minStockLevel: parsed.minStockLevel ?? 5,
       unit: parsed.unit,
       images,
       isActive: parsed.isActive ?? true,
-    });
+    };
+
+    let product;
+    if (parsed.currentStock > 0) {
+      product = await createProductWithOpeningStock({
+        productData,
+        openingStock: parsed.currentStock,
+      });
+    } else {
+      product = await Product.create({
+        ...productData,
+        currentStock: 0,
+      });
+    }
 
     const populated = await Product.findById(product._id)
       .populate("category", "name slug isActive")

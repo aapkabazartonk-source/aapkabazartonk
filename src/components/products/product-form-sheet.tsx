@@ -331,14 +331,24 @@ export function ProductFormSheet({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="current-stock">Current stock</Label>
+              <Label htmlFor="current-stock">
+                {mode === "edit" ? "Current stock" : "Opening stock"}
+              </Label>
               <Input
                 id="current-stock"
                 type="number"
                 min={0}
                 step="1"
+                readOnly={mode === "edit"}
+                disabled={mode === "edit"}
+                className={mode === "edit" ? "bg-muted" : undefined}
                 {...form.register("currentStock")}
               />
+              {mode === "edit" ? (
+                <p className="text-xs text-muted-foreground">
+                  Use Inventory → Adjust stock to change quantity.
+                </p>
+              ) : null}
               {form.formState.errors.currentStock ? (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.currentStock.message}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Settings, User } from "lucide-react";
+import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,15 +18,22 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group flex h-11 items-center gap-2.5 rounded-full border border-border bg-background pl-1.5 pr-3 transition-colors hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-muted/80"
         >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback>AD</AvatarFallback>
+          <Avatar className="h-8 w-8 ring-2 ring-purple-soft">
+            <AvatarFallback className="bg-purple text-xs font-semibold tracking-wide text-purple-foreground">
+              AD
+            </AvatarFallback>
           </Avatar>
-          <div className="hidden text-left sm:block">
-            <p className="text-sm font-medium leading-none">Aditya</p>
-            <p className="text-xs text-muted-foreground">Store Owner</p>
+          <div className="hidden min-w-0 text-left sm:block">
+            <p className="truncate text-sm font-semibold leading-tight tracking-tight text-foreground">
+              Aditya
+            </p>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">
+              Store Owner
+            </p>
           </div>
+          <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 sm:block" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

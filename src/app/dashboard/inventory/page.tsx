@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Warehouse } from "lucide-react";
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { Suspense } from "react";
+import { InventoryOverview } from "@/components/inventory/inventory-overview";
 
 export const metadata: Metadata = {
   title: "Inventory",
@@ -8,11 +8,8 @@ export const metadata: Metadata = {
 
 export default function InventoryPage() {
   return (
-    <PlaceholderPage
-      title="Inventory"
-      description="Track stock levels, adjustments, transfers, and reorder points across your store."
-      icon={Warehouse}
-      highlights={["Stock movements", "Reorder alerts", "Stock valuation"]}
-    />
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading inventory...</div>}>
+      <InventoryOverview />
+    </Suspense>
   );
 }

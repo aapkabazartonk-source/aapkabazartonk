@@ -72,7 +72,9 @@ export const productFormSchema = productBaseSchema.superRefine(
 
 export const productCreateSchema = productFormSchema;
 
+/** Stock quantity cannot be changed via product update — use inventory adjustments. */
 export const productUpdateSchema = productBaseSchema
+  .omit({ currentStock: true })
   .partial()
   .superRefine(refineCategoryRelation);
 

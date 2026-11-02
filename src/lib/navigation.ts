@@ -4,6 +4,7 @@ import {
   Package,
   Tags,
   Warehouse,
+  ClipboardList,
   Receipt,
   ShoppingCart,
   Users,
@@ -44,6 +45,12 @@ export const DASHBOARD_NAV: NavItem[] = [
     href: "/dashboard/inventory",
     icon: Warehouse,
     description: "Track stock levels and movements",
+  },
+  {
+    title: "Purchases",
+    href: "/dashboard/purchases",
+    icon: ClipboardList,
+    description: "Purchase drafts and goods receiving",
   },
   {
     title: "POS Billing",

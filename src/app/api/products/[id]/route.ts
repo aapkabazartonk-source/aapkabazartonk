@@ -68,6 +68,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const body = await request.json();
+    if (
+      body &&
+      typeof body === "object" &&
+      "currentStock" in body &&
+      (body as { currentStock?: unknown }).currentStock !== undefined
+    ) {
+      return jsonError(
+        "Stock cannot be modified through product updates. Use inventory adjustments instead.",
+        400,
+      );
+    }
     const parsed = productUpdateSchema.parse(body);
 
     const nextCategory =
@@ -115,10 +126,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (parsed.sellingPrice !== undefined) {
       existing.sellingPrice = parsed.sellingPrice;
     }
-    // Explicit stock field updates only — no automatic adjustments
-    if (parsed.currentStock !== undefined) {
-      existing.currentStock = parsed.currentStock;
-    }
     if (parsed.minStockLevel !== undefined) {
       existing.minStockLevel = parsed.minStockLevel;
     }
@@ -160,7 +167,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const hasRefs = await productHasTransactionReferences(id);
     if (hasRefs) {
       return jsonError(
-        `Cannot delete "${existing.name}" because it has existing sales or purchase references. Archive the product instead.`,
+        `Cannot delete "${existing.name}" because it has existing sales, purchase, or inventory references. Archive the product instead.`,
         409,
       );
     }

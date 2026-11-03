@@ -153,6 +153,15 @@ export function InventoryOverview() {
         )}
       </div>
 
+      {!loading && stats?.totalProducts === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            No products yet. Add a product with opening stock, or receive a
+            purchase, and the counts below will come from your inventory.
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SimpleStatCard
           label="Total products"
@@ -308,28 +317,68 @@ export function InventoryOverview() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recently updated products</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Recent purchases</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/purchases">Purchases</Link>
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(data?.recentlyUpdated ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No products yet.</p>
+            {(data?.recentPurchases ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No purchases yet.</p>
             ) : (
-              data?.recentlyUpdated.map((item) => (
+              data?.recentPurchases.map((item) => (
+                <div
+                  key={String(item._id)}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs font-medium">
+                      {String(item.purchaseNumber)}
+                    </p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {String(item.supplierName)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">
+                      {formatCurrency(Number(item.total ?? 0))}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {String(item.status)}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Recently adjusted</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(data?.recentAdjustments ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No stock adjustments yet.
+              </p>
+            ) : (
+              data?.recentAdjustments.map((item) => (
                 <div
                   key={String(item._id)}
                   className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {String(item.name)}
+                      {productName(item.product)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {String(item.sku)}
+                      {String(item.adjustmentType)} · {productSku(item.product)}
                     </p>
                   </div>
                   <p className="text-sm font-medium">
-                    {formatNumber(Number(item.currentStock))}
+                    {formatNumber(Number(item.newStock))}
                   </p>
                 </div>
               ))

@@ -1,11 +1,11 @@
 import { Types } from "mongoose";
-import { connectToDatabase } from "@/lib/db";
 import {
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
 } from "@/lib/api";
+import { requireTenant } from "@/lib/tenant";
 import {
   assertValidParent,
   ensureUniqueSlug,
@@ -17,16 +17,19 @@ import { Product } from "@/models/Product";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid category ID.", 400);
     }
 
-    const category = await Category.findById(id)
+    const category = await Category.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    })
       .populate("parentCategory", "name slug")
       .lean();
 
@@ -35,6 +38,7 @@ export async function GET(_request: Request, context: RouteContext) {
     }
 
     const productCount = await Product.countDocuments({
+      businessId: tenant.businessId,
       $or: [{ category: id }, { subcategory: id }],
     });
 
@@ -46,14 +50,17 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid category ID.", 400);
     }
 
-    const existing = await Category.findById(id);
+    const existing = await Category.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    });
     if (!existing) {
       return jsonError("Category not found.", 404);
     }
@@ -65,6 +72,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       const normalizedName = normalizeName(parsed.name);
       const duplicate = await Category.exists({
         normalizedName,
+        businessId: tenant.businessId,
         _id: { $ne: id },
       });
       if (duplicate) {
@@ -75,7 +83,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       existing.name = parsed.name.trim();
       existing.normalizedName = normalizedName;
-      existing.slug = await ensureUniqueSlug(slugify(parsed.name), id);
+      existing.slug = await ensureUniqueSlug(slugify(parsed.name), {
+        businessId: tenant.businessId,
+        excludeId: id,
+      });
     }
 
     if (parsed.description !== undefined) {
@@ -93,13 +104,16 @@ export async function PATCH(request: Request, context: RouteContext) {
         if (!Types.ObjectId.isValid(parsed.parentCategory)) {
           return jsonError("Invalid parent category.", 400);
         }
-        const parent = await Category.findById(parsed.parentCategory)
+        const parent = await Category.findOne({
+          _id: parsed.parentCategory,
+          businessId: tenant.businessId,
+        })
           .select("_id")
           .lean();
         if (!parent) {
           return jsonError("Parent category not found.", 400);
         }
-        await assertValidParent(id, parsed.parentCategory);
+        await assertValidParent(id, parsed.parentCategory, tenant.businessId);
         existing.parentCategory = new Types.ObjectId(parsed.parentCategory);
       } else {
         existing.parentCategory = null;
@@ -118,25 +132,34 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid category ID.", 400);
     }
 
-    const existing = await Category.findById(id).select("_id name").lean();
+    const existing = await Category.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    })
+      .select("_id name")
+      .lean();
     if (!existing) {
       return jsonError("Category not found.", 404);
     }
 
     const [productCount, childCount] = await Promise.all([
       Product.countDocuments({
+        businessId: tenant.businessId,
         $or: [{ category: id }, { subcategory: id }],
       }),
-      Category.countDocuments({ parentCategory: id }),
+      Category.countDocuments({
+        businessId: tenant.businessId,
+        parentCategory: id,
+      }),
     ]);
 
     if (productCount > 0) {
@@ -153,7 +176,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       );
     }
 
-    await Category.findByIdAndDelete(id);
+    await Category.deleteOne({ _id: id, businessId: tenant.businessId });
     return jsonOk({ data: { id }, message: "Category deleted successfully." });
   } catch (error) {
     return handleApiError(error);

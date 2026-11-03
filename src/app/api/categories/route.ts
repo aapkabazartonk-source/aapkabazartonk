@@ -1,11 +1,12 @@
 import { Types } from "mongoose";
-import { connectToDatabase } from "@/lib/db";
 import {
+  escapeRegex,
   handleApiError,
   jsonError,
   jsonOk,
   parsePagination,
 } from "@/lib/api";
+import { requireTenant } from "@/lib/tenant";
 import {
   assertValidParent,
   ensureUniqueSlug,
@@ -17,7 +18,7 @@ import { Product } from "@/models/Product";
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
@@ -26,7 +27,9 @@ export async function GET(request: Request) {
     const parentOnly = searchParams.get("parentOnly") === "true";
     const flat = searchParams.get("flat") === "true";
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+    };
 
     if (status === "active") filter.isActive = true;
     if (status === "inactive") filter.isActive = false;
@@ -41,9 +44,9 @@ export async function GET(request: Request) {
     if (search) {
       const searchClause = {
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
-          { slug: { $regex: search, $options: "i" } },
+          { name: { $regex: escapeRegex(search), $options: "i" } },
+          { description: { $regex: escapeRegex(search), $options: "i" } },
+          { slug: { $regex: escapeRegex(search), $options: "i" } },
         ],
       };
       filter.$and = [searchClause];
@@ -71,9 +74,12 @@ export async function GET(request: Request) {
         .skip(skip)
         .limit(limit)
         .lean(),
-      Category.countDocuments(),
-      Category.countDocuments({ isActive: true }),
-      Product.countDocuments(),
+      Category.countDocuments({ businessId: tenant.businessId }),
+      Category.countDocuments({
+        businessId: tenant.businessId,
+        isActive: true,
+      }),
+      Product.countDocuments({ businessId: tenant.businessId }),
     ]);
 
     const categoryIds = categories.map((c) => c._id);
@@ -82,6 +88,7 @@ export async function GET(request: Request) {
         ? await Product.aggregate<{ _id: Types.ObjectId; count: number }>([
             {
               $match: {
+                businessId: tenant.businessId,
                 $or: [
                   { category: { $in: categoryIds } },
                   { subcategory: { $in: categoryIds } },
@@ -140,13 +147,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
 
     const body = await request.json();
     const parsed = categoryCreateSchema.parse(body);
 
     const normalizedName = normalizeName(parsed.name);
-    const existingName = await Category.exists({ normalizedName });
+    const existingName = await Category.exists({
+      normalizedName,
+      businessId: tenant.businessId,
+    });
     if (existingName) {
       return jsonError(
         "A category with this name already exists (case-insensitive).",
@@ -158,19 +168,25 @@ export async function POST(request: Request) {
       if (!Types.ObjectId.isValid(parsed.parentCategory)) {
         return jsonError("Invalid parent category.", 400);
       }
-      const parent = await Category.findById(parsed.parentCategory)
+      const parent = await Category.findOne({
+        _id: parsed.parentCategory,
+        businessId: tenant.businessId,
+      })
         .select("_id")
         .lean();
       if (!parent) {
         return jsonError("Parent category not found.", 400);
       }
-      await assertValidParent(null, parsed.parentCategory);
+      await assertValidParent(null, parsed.parentCategory, tenant.businessId);
     }
 
     const baseSlug = slugify(parsed.name);
-    const slug = await ensureUniqueSlug(baseSlug);
+    const slug = await ensureUniqueSlug(baseSlug, {
+      businessId: tenant.businessId,
+    });
 
     const category = await Category.create({
+      businessId: tenant.businessId,
       name: parsed.name.trim(),
       normalizedName,
       slug,

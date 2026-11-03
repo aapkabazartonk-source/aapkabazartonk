@@ -10,6 +10,7 @@ const CustomerSchema = new Schema(
     totalSpent: { type: Number, default: 0, min: 0 },
     orderCount: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
   },
   { timestamps: true },
 );

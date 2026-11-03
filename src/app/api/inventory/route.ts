@@ -1,32 +1,42 @@
-import { connectToDatabase } from "@/lib/db";
+import {
+  STOCK_IN_MOVEMENT_TYPES,
+  STOCK_OUT_MOVEMENT_TYPES,
+} from "@/lib/constants";
 import { handleApiError, jsonOk } from "@/lib/api";
 import { getStockStatus } from "@/lib/product-rules";
+import { suggestedReorderQuantity } from "@/lib/reorder";
+import { requireTenant } from "@/lib/tenant";
 import { InventoryLog } from "@/models/InventoryLog";
 import { Product } from "@/models/Product";
+import { Purchase } from "@/models/Purchase";
+import { StockAdjustment } from "@/models/StockAdjustment";
 
 function parseDateRange(searchParams: URLSearchParams) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
-  const range: { createdAt?: { $gte?: Date; $lte?: Date } } = {};
+  const createdAt: { $gte?: Date; $lte?: Date } = {};
 
-  if (from || to) {
-    range.createdAt = {};
-    if (from) range.createdAt.$gte = new Date(from);
-    if (to) {
-      const end = new Date(to);
-      end.setHours(23, 59, 59, 999);
-      range.createdAt.$lte = end;
-    }
+  if (from) createdAt.$gte = new Date(from);
+  if (to) {
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+    createdAt.$lte = end;
   }
 
-  return range;
+  return createdAt;
 }
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { searchParams } = new URL(request.url);
-    const dateFilter = parseDateRange(searchParams);
+    const createdAt = parseDateRange(searchParams);
+    const businessId = tenant.businessId;
+    const activeMatch = { businessId, isActive: true };
+    const logMatch = {
+      businessId,
+      ...(createdAt.$gte || createdAt.$lte ? { createdAt } : {}),
+    };
 
     const [
       totalProducts,
@@ -41,15 +51,16 @@ export async function GET(request: Request) {
       lowStockAlerts,
       outOfStockList,
       recentMovements,
-      recentlyUpdated,
+      recentAdjustments,
+      recentPurchases,
     ] = await Promise.all([
-      Product.countDocuments({ isActive: true }),
+      Product.countDocuments(activeMatch),
       Product.aggregate<{ total: number }>([
-        { $match: { isActive: true } },
+        { $match: activeMatch },
         { $group: { _id: null, total: { $sum: "$currentStock" } } },
       ]),
       Product.aggregate<{ value: number }>([
-        { $match: { isActive: true } },
+        { $match: activeMatch },
         {
           $group: {
             _id: null,
@@ -60,11 +71,11 @@ export async function GET(request: Request) {
         },
       ]),
       Product.countDocuments({
-        isActive: true,
+        ...activeMatch,
         $expr: { $gt: ["$currentStock", "$minStockLevel"] },
       }),
       Product.countDocuments({
-        isActive: true,
+        ...activeMatch,
         $expr: {
           $and: [
             { $gt: ["$currentStock", 0] },
@@ -72,13 +83,13 @@ export async function GET(request: Request) {
           ],
         },
       }),
-      Product.countDocuments({ isActive: true, currentStock: { $lte: 0 } }),
+      Product.countDocuments({ ...activeMatch, currentStock: { $lte: 0 } }),
       InventoryLog.aggregate<{
         _id: string;
         stockIn: number;
         stockOut: number;
       }>([
-        ...(dateFilter.createdAt ? [{ $match: dateFilter }] : []),
+        { $match: logMatch },
         {
           $group: {
             _id: {
@@ -87,23 +98,27 @@ export async function GET(request: Request) {
             stockIn: {
               $sum: {
                 $cond: [
+                  { $in: ["$movementType", [...STOCK_IN_MOVEMENT_TYPES]] },
+                  "$quantity",
                   {
-                    $in: [
-                      "$movementType",
-                      ["STOCK_IN", "OPENING_STOCK", "PURCHASE_RECEIVE"],
+                    $cond: [
+                      {
+                        $and: [
+                          { $eq: ["$movementType", "CORRECTION"] },
+                          { $gt: ["$newStock", "$previousStock"] },
+                        ],
+                      },
+                      "$quantity",
+                      0,
                     ],
                   },
-                  "$quantity",
-                  0,
                 ],
               },
             },
             stockOut: {
               $sum: {
                 $cond: [
-                  {
-                    $in: ["$movementType", ["STOCK_OUT", "DAMAGED", "LOST"]],
-                  },
+                  { $in: ["$movementType", [...STOCK_OUT_MOVEMENT_TYPES]] },
                   "$quantity",
                   {
                     $cond: [
@@ -126,7 +141,7 @@ export async function GET(request: Request) {
         { $limit: 30 },
       ]),
       Product.aggregate<{ _id: unknown; name: string; units: number }>([
-        { $match: { isActive: true } },
+        { $match: activeMatch },
         {
           $group: {
             _id: "$category",
@@ -153,7 +168,7 @@ export async function GET(request: Request) {
         { $limit: 8 },
       ]),
       Product.aggregate<{ _id: unknown; name: string; value: number }>([
-        { $match: { isActive: true } },
+        { $match: activeMatch },
         {
           $group: {
             _id: "$category",
@@ -182,7 +197,7 @@ export async function GET(request: Request) {
         { $limit: 8 },
       ]),
       Product.find({
-        isActive: true,
+        ...activeMatch,
         $expr: {
           $and: [
             { $gt: ["$currentStock", 0] },
@@ -194,25 +209,56 @@ export async function GET(request: Request) {
         .sort({ currentStock: 1 })
         .limit(8)
         .lean(),
-      Product.find({ isActive: true, currentStock: { $lte: 0 } })
+      Product.find({ ...activeMatch, currentStock: { $lte: 0 } })
         .populate("category", "name")
         .sort({ updatedAt: -1 })
         .limit(8)
         .lean(),
-      InventoryLog.find(dateFilter.createdAt ? dateFilter : {})
+      InventoryLog.find(logMatch)
         .populate("product", "name sku")
         .sort({ createdAt: -1 })
-        .limit(10)
-        .lean(),
-      Product.find({ isActive: true })
-        .populate("category", "name")
-        .sort({ updatedAt: -1 })
         .limit(8)
-        .select("name sku currentStock minStockLevel updatedAt images category")
+        .lean(),
+      StockAdjustment.find({ businessId })
+        .populate("product", "name sku")
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .lean(),
+      Purchase.find({ businessId })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .select(
+          "purchaseNumber supplierName supplierInvoiceNumber total status purchaseDate",
+        )
         .lean(),
     ]);
 
-    const chartColors = ["#A3CA69", "#9299C9", "#C5DF8F", "#B8BFD9", "#7EAB3A", "#6B739E", "#DCE0F0", "#E5F0D5"];
+    const chartColors = [
+      "#128C7E",
+      "#A5CB62",
+      "#7EAB3A",
+      "#E5F0D5",
+      "#5F8F86",
+      "#C5DF8F",
+      "#252B24",
+      "#858C80",
+    ];
+
+    const withReorder = <T extends { currentStock?: number; minStockLevel?: number }>(
+      product: T,
+    ) => {
+      const currentStock = Number(product.currentStock ?? 0);
+      const minStockLevel = Number(product.minStockLevel ?? 0);
+      return {
+        ...product,
+        stockStatus: getStockStatus(currentStock, minStockLevel),
+        suggestedReorder: suggestedReorderQuantity(
+          currentStock,
+          minStockLevel,
+          tenant.reorderMultiple,
+        ),
+      };
+    };
 
     return jsonOk({
       data: {
@@ -241,26 +287,12 @@ export async function GET(request: Request) {
             fill: chartColors[index % chartColors.length],
           })),
         },
-        lowStockAlerts: lowStockAlerts.map((product) => {
-          const currentStock = Number(product.currentStock ?? 0);
-          const minStockLevel = Number(product.minStockLevel ?? 0);
-          return {
-            ...product,
-            stockStatus: getStockStatus(currentStock, minStockLevel),
-            suggestedReorder: Math.max(minStockLevel * 2 - currentStock, minStockLevel),
-          };
-        }),
-        outOfStockProducts: outOfStockList.map((product) => {
-          const currentStock = Number(product.currentStock ?? 0);
-          const minStockLevel = Number(product.minStockLevel ?? 0);
-          return {
-            ...product,
-            stockStatus: getStockStatus(currentStock, minStockLevel),
-            suggestedReorder: Math.max(minStockLevel * 2, 1),
-          };
-        }),
+        lowStockAlerts: lowStockAlerts.map((product) => withReorder(product)),
+        outOfStockProducts: outOfStockList.map((product) => withReorder(product)),
         recentMovements,
-        recentlyUpdated,
+        recentAdjustments,
+        recentPurchases,
+        reorderMultiple: tenant.reorderMultiple,
       },
     });
   } catch (error) {

@@ -8,6 +8,7 @@ import { Category } from "@/models/Category";
 export async function assertValidParent(
   categoryId: string | null,
   candidateParentId: string | null,
+  businessId: Types.ObjectId,
 ) {
   if (!candidateParentId) return;
 
@@ -29,7 +30,13 @@ export async function assertValidParent(
       visited.add(current);
 
       const parentDoc: { parentCategory?: Types.ObjectId | null } | null =
-        await Category.findById(current).select("parentCategory").lean();
+        await Category.findOne({ _id: current, businessId })
+          .select("parentCategory")
+          .lean();
+
+      if (!parentDoc) {
+        throw new Error("Parent category not found.");
+      }
 
       current = parentDoc?.parentCategory
         ? parentDoc.parentCategory.toString()
@@ -40,15 +47,18 @@ export async function assertValidParent(
 
 export async function ensureUniqueSlug(
   baseSlug: string,
-  excludeId?: string,
+  options: { businessId: Types.ObjectId; excludeId?: string },
 ): Promise<string> {
   let slug = baseSlug || "category";
   let attempt = 0;
 
   while (attempt < 50) {
-    const query: Record<string, unknown> = { slug };
-    if (excludeId) {
-      query._id = { $ne: excludeId };
+    const query: Record<string, unknown> = {
+      slug,
+      businessId: options.businessId,
+    };
+    if (options.excludeId) {
+      query._id = { $ne: options.excludeId };
     }
     const existing = await Category.exists(query);
     if (!existing) return slug;

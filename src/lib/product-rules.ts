@@ -20,11 +20,14 @@ export function getStockStatus(
 export async function assertValidCategoryRefs(
   categoryId: string,
   subcategoryId: string | null,
-  options?: { requireActive?: boolean },
+  options: { requireActive?: boolean; businessId: Types.ObjectId },
 ) {
   const requireActive = options?.requireActive ?? true;
 
-  const category = await Category.findById(categoryId)
+  const category = await Category.findOne({
+    _id: categoryId,
+    businessId: options.businessId,
+  })
     .select("name isActive parentCategory")
     .lean<{
       _id: Types.ObjectId;
@@ -43,7 +46,10 @@ export async function assertValidCategoryRefs(
 
   if (!subcategoryId) return { category, subcategory: null };
 
-  const subcategory = await Category.findById(subcategoryId)
+  const subcategory = await Category.findOne({
+    _id: subcategoryId,
+    businessId: options.businessId,
+  })
     .select("name isActive parentCategory")
     .lean<{
       _id: Types.ObjectId;
@@ -76,9 +82,15 @@ export async function productHasTransactionReferences(productId: string) {
   return Boolean(orderRef || purchaseRef || logRef || adjustmentRef);
 }
 
-export async function assertUniqueSku(sku: string, excludeId?: string) {
-  const query: Record<string, unknown> = { sku: sku.toUpperCase() };
-  if (excludeId) query._id = { $ne: excludeId };
+export async function assertUniqueSku(
+  sku: string,
+  options: { businessId: Types.ObjectId; excludeId?: string },
+) {
+  const query: Record<string, unknown> = {
+    sku: sku.toUpperCase(),
+    businessId: options.businessId,
+  };
+  if (options.excludeId) query._id = { $ne: options.excludeId };
   const exists = await Product.exists(query);
   if (exists) {
     throw new Error("SKU already exists. Please use a unique SKU.");
@@ -87,13 +99,16 @@ export async function assertUniqueSku(sku: string, excludeId?: string) {
 
 export async function assertUniqueBarcode(
   barcode: string | undefined | null,
-  excludeId?: string,
+  options: { businessId: Types.ObjectId; excludeId?: string },
 ) {
   const value = (barcode ?? "").trim();
   if (!value) return;
 
-  const query: Record<string, unknown> = { barcode: value };
-  if (excludeId) query._id = { $ne: excludeId };
+  const query: Record<string, unknown> = {
+    barcode: value,
+    businessId: options.businessId,
+  };
+  if (options.excludeId) query._id = { $ne: options.excludeId };
   const exists = await Product.exists(query);
   if (exists) {
     throw new Error("Barcode already exists. Please use a unique barcode.");

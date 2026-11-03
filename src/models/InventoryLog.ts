@@ -14,6 +14,8 @@ import {
 } from "@/lib/constants";
 
 export interface IInventoryLog {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId;
   product: Types.ObjectId;
   movementType: InventoryMovementType;
   quantity: number;
@@ -22,6 +24,7 @@ export interface IInventoryLog {
   reason: string;
   referenceType: InventoryReferenceType;
   referenceId?: Types.ObjectId | null;
+  referenceNumber: string;
   notes?: string;
   performedBy?: Types.ObjectId | null;
   createdAt: Date;
@@ -30,6 +33,18 @@ export interface IInventoryLog {
 
 const InventoryLogSchema = new Schema<IInventoryLog>(
   {
+    businessId: {
+      type: Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+      index: true,
+    },
     product: {
       type: Schema.Types.ObjectId,
       ref: "Product",
@@ -74,6 +89,12 @@ const InventoryLogSchema = new Schema<IInventoryLog>(
       default: null,
       index: true,
     },
+    referenceNumber: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 100,
+    },
     notes: {
       type: String,
       default: "",
@@ -89,10 +110,30 @@ const InventoryLogSchema = new Schema<IInventoryLog>(
   { timestamps: true },
 );
 
-InventoryLogSchema.index({ createdAt: -1 });
-InventoryLogSchema.index({ product: 1, createdAt: -1 });
-InventoryLogSchema.index({ movementType: 1, createdAt: -1 });
-InventoryLogSchema.index({ referenceType: 1, referenceId: 1 });
+InventoryLogSchema.index({ businessId: 1, createdAt: -1 });
+InventoryLogSchema.index({ businessId: 1, product: 1, createdAt: -1 });
+InventoryLogSchema.index({ businessId: 1, movementType: 1, createdAt: -1 });
+InventoryLogSchema.index({ businessId: 1, referenceType: 1, referenceId: 1 });
+
+function rejectInventoryLogMutation() {
+  throw new Error(
+    "Inventory logs are immutable and cannot be modified through application APIs.",
+  );
+}
+
+const immutableHooks = [
+  "updateOne",
+  "updateMany",
+  "findOneAndUpdate",
+  "replaceOne",
+  "deleteOne",
+  "deleteMany",
+  "findOneAndDelete",
+] as const;
+
+for (const hook of immutableHooks) {
+  InventoryLogSchema.pre(hook, rejectInventoryLogMutation);
+}
 
 export type InventoryLogDocument = InferSchemaType<typeof InventoryLogSchema> & {
   _id: Types.ObjectId;

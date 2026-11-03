@@ -31,6 +31,12 @@ export const stockAdjustmentCreateSchema = z.object({
     .max(100, "Reference number cannot exceed 100 characters")
     .optional()
     .default(""),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(8, "Idempotency key is too short")
+    .max(80)
+    .optional(),
 }).superRefine((data, ctx) => {
   if (data.adjustmentType !== "CORRECTION" && data.quantity <= 0) {
     ctx.addIssue({

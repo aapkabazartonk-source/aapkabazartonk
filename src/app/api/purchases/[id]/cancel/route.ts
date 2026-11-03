@@ -1,24 +1,25 @@
-import { connectToDatabase } from "@/lib/db";
 import {
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
 } from "@/lib/api";
+import { scopeFromTenant } from "@/lib/inventory-stock";
 import { cancelPurchase } from "@/lib/purchase-service";
+import { requireTenant } from "@/lib/tenant";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid purchase ID.", 400);
     }
 
-    const purchase = await cancelPurchase(id);
+    const purchase = await cancelPurchase(id, scopeFromTenant(tenant));
 
     return jsonOk({
       data: purchase.toObject(),

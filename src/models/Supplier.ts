@@ -9,6 +9,9 @@ const SupplierSchema = new Schema(
     address: { type: String },
     notes: { type: String },
     isActive: { type: Boolean, default: true },
+    /** Prepared for Phase 6. Purchases may optionally reference this supplier. */
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" },
   },
   { timestamps: true },
 );

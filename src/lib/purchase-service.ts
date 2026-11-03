@@ -1,29 +1,60 @@
-import { Types } from "mongoose";
+import { Types, type ClientSession } from "mongoose";
 import { nextDailySequence } from "@/lib/document-numbers";
 import {
-  applyStockChange,
+  duplicateKeyPattern,
   InventoryError,
+  mutateProductStock,
   withMongoTransaction,
+  writeInventoryLog,
+  type StockScope,
 } from "@/lib/inventory-stock";
 import { multiplyMoney, roundMoney, sumMoney } from "@/lib/money";
-import type { PurchaseCreateValues, PurchaseUpdateValues } from "@/lib/validators/purchase";
+import type {
+  PurchaseCreateValues,
+  PurchaseUpdateValues,
+} from "@/lib/validators/purchase";
 import { Product } from "@/models/Product";
 import { Purchase, type IPurchaseItem } from "@/models/Purchase";
+import { Supplier } from "@/models/Supplier";
+
+function lineAmounts(item: {
+  quantity: number;
+  purchasePrice: number;
+  discount?: number;
+  taxRate?: number;
+}) {
+  const lineGross = multiplyMoney(item.quantity, item.purchasePrice);
+  const lineDiscount = Math.min(lineGross, roundMoney(item.discount ?? 0));
+  const taxable = Math.max(0, roundMoney(lineGross - lineDiscount));
+  const taxAmount = roundMoney(taxable * ((item.taxRate ?? 0) / 100));
+  const total = roundMoney(taxable + taxAmount);
+  return { lineGross, lineDiscount, taxAmount, total };
+}
 
 async function buildPurchaseItems(
   items: PurchaseCreateValues["items"],
-  session?: import("mongoose").ClientSession,
+  businessId: Types.ObjectId,
+  session?: ClientSession,
 ) {
   const built: IPurchaseItem[] = [];
+  const seen = new Set<string>();
 
   for (const item of items) {
-    const query = Product.findById(item.productId).select(
-      "name sku isActive purchasePrice",
-    );
+    if (seen.has(item.productId)) {
+      throw new InventoryError(
+        "Each product can appear only once on a purchase. Combine the quantity on a single line.",
+      );
+    }
+    seen.add(item.productId);
+
+    const query = Product.findOne({
+      _id: item.productId,
+      businessId,
+    }).select("name sku isActive purchasePrice");
     if (session) query.session(session);
     const product = await query;
     if (!product) {
-      throw new InventoryError(`Product not found: ${item.productId}`, 404);
+      throw new InventoryError("One or more products were not found.", 404);
     }
     if (!product.isActive) {
       throw new InventoryError(
@@ -32,85 +63,131 @@ async function buildPurchaseItems(
       );
     }
 
-    const lineGross = multiplyMoney(item.quantity, item.purchasePrice);
-    const lineDiscount = roundMoney(item.discount ?? 0);
-    const taxable = Math.max(0, roundMoney(lineGross - lineDiscount));
-    const lineTax = roundMoney(taxable * ((item.taxRate ?? 0) / 100));
-    const lineTotal = roundMoney(taxable + lineTax);
-
+    const amounts = lineAmounts(item);
     built.push({
       product: product._id,
       productName: product.name,
       sku: product.sku,
+      productNameSnapshot: product.name,
+      skuSnapshot: product.sku,
       quantity: item.quantity,
       purchasePrice: item.purchasePrice,
       taxRate: item.taxRate ?? 0,
-      discount: lineDiscount,
-      total: lineTotal,
+      discount: amounts.lineDiscount,
+      taxAmount: amounts.taxAmount,
+      total: amounts.total,
     });
   }
 
   return built;
 }
 
-function summarizeItems(
-  items: IPurchaseItem[],
-  headerDiscount = 0,
-  headerTax = 0,
-) {
-  const itemsSubtotal = sumMoney(items.map((item) => item.total));
-  const discount = roundMoney(headerDiscount);
-  const tax = roundMoney(headerTax);
-  const subtotal = itemsSubtotal;
-  const total = Math.max(0, roundMoney(subtotal - discount + tax));
+/**
+ * subtotal = sum of quantity × purchase price
+ * discount = invoice-level discount (line discounts stay on each item)
+ * tax = sum of line GST amounts (non-GST purchases keep every rate at 0)
+ * total = subtotal − line discounts − invoice discount + tax
+ */
+function summarizeItems(items: IPurchaseItem[], invoiceDiscount = 0) {
+  const subtotal = sumMoney(
+    items.map((item) => multiplyMoney(item.quantity, item.purchasePrice)),
+  );
+  const lineDiscount = sumMoney(items.map((item) => item.discount));
+  const discount = roundMoney(invoiceDiscount);
+  const tax = sumMoney(items.map((item) => item.taxAmount));
+  const total = Math.max(
+    0,
+    roundMoney(subtotal - lineDiscount - discount + tax),
+  );
   return { subtotal, discount, tax, total };
+}
+
+async function assertSupplier(
+  supplierId: string | null | undefined,
+  businessId: Types.ObjectId,
+) {
+  if (!supplierId) return null;
+  const supplier = await Supplier.findOne({
+    _id: supplierId,
+    businessId,
+    isActive: { $ne: false },
+  }).select("_id");
+  if (!supplier) {
+    throw new InventoryError("Supplier not found.", 404);
+  }
+  return supplier._id;
+}
+
+async function nextPurchaseNumber(
+  businessId: Types.ObjectId,
+  session?: ClientSession,
+) {
+  return nextDailySequence(async (prefix) => {
+    const query = Purchase.countDocuments({
+      businessId,
+      purchaseNumber: { $regex: `^${prefix}` },
+    });
+    if (session) query.session(session);
+    return query;
+  }, "PUR");
 }
 
 export async function createPurchaseDraft(params: {
   data: PurchaseCreateValues;
-  createdBy?: string | null;
+  scope: StockScope;
 }) {
-  const { data, createdBy = null } = params;
+  const { data, scope } = params;
+  const items = await buildPurchaseItems(data.items, scope.businessId);
+  const totals = summarizeItems(items, data.discount ?? 0);
+  const supplier = await assertSupplier(data.supplierId, scope.businessId);
 
-  const items = await buildPurchaseItems(data.items);
-  const totals = summarizeItems(items, data.discount ?? 0, data.tax ?? 0);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const purchaseNumber = await nextPurchaseNumber(scope.businessId);
+      const purchase = await Purchase.create({
+        businessId: scope.businessId,
+        storeId: scope.storeId,
+        purchaseNumber,
+        supplierName: data.supplierName.trim(),
+        supplierContact: (data.supplierContact ?? "").trim(),
+        supplierInvoiceNumber: (data.supplierInvoiceNumber ?? "").trim(),
+        supplier,
+        purchaseDate: data.purchaseDate ?? new Date(),
+        expectedDeliveryDate: data.expectedDeliveryDate ?? null,
+        items,
+        ...totals,
+        status: "DRAFT",
+        notes: (data.notes ?? "").trim(),
+        createdBy: scope.performedBy ?? null,
+      });
+      return purchase;
+    } catch (error) {
+      const pattern = duplicateKeyPattern(error);
+      if (pattern && "purchaseNumber" in pattern && attempt < 2) {
+        continue;
+      }
+      throw error;
+    }
+  }
 
-  const purchaseNumber = await nextDailySequence(
-    async (prefix) =>
-      Purchase.countDocuments({
-        purchaseNumber: { $regex: `^${prefix}` },
-      }),
-    "PUR",
-  );
-
-  const purchase = await Purchase.create({
-    purchaseNumber,
-    supplierName: data.supplierName.trim(),
-    supplierContact: (data.supplierContact ?? "").trim(),
-    supplier: data.supplierId ? new Types.ObjectId(data.supplierId) : null,
-    purchaseDate: data.purchaseDate ?? new Date(),
-    expectedDeliveryDate: data.expectedDeliveryDate ?? null,
-    items,
-    ...totals,
-    status: "DRAFT",
-    notes: (data.notes ?? "").trim(),
-    createdBy: createdBy ? new Types.ObjectId(createdBy) : null,
-  });
-
-  return purchase;
+  throw new InventoryError("Could not allocate a purchase number.", 500);
 }
 
 export async function updatePurchaseDraft(
   purchaseId: string,
   data: PurchaseUpdateValues,
+  scope: StockScope,
 ) {
-  const purchase = await Purchase.findById(purchaseId);
+  const purchase = await Purchase.findOne({
+    _id: purchaseId,
+    businessId: scope.businessId,
+  });
   if (!purchase) {
     throw new InventoryError("Purchase not found.", 404);
   }
   if (purchase.status !== "DRAFT") {
     throw new InventoryError(
-      "Only draft purchases can be edited. Received purchases require a dedicated correction process.",
+      "Only draft purchases can be edited. Received purchases cannot be changed directly.",
       409,
     );
   }
@@ -121,10 +198,11 @@ export async function updatePurchaseDraft(
   if (data.supplierContact !== undefined) {
     purchase.supplierContact = data.supplierContact.trim();
   }
+  if (data.supplierInvoiceNumber !== undefined) {
+    purchase.supplierInvoiceNumber = data.supplierInvoiceNumber.trim();
+  }
   if (data.supplierId !== undefined) {
-    purchase.supplier = data.supplierId
-      ? new Types.ObjectId(data.supplierId)
-      : null;
+    purchase.supplier = await assertSupplier(data.supplierId, scope.businessId);
   }
   if (data.purchaseDate !== undefined) {
     purchase.purchaseDate = data.purchaseDate;
@@ -135,15 +213,13 @@ export async function updatePurchaseDraft(
   if (data.notes !== undefined) {
     purchase.notes = data.notes.trim();
   }
-
   if (data.items) {
-    purchase.items = await buildPurchaseItems(data.items);
+    purchase.items = await buildPurchaseItems(data.items, scope.businessId);
   }
 
   const totals = summarizeItems(
     purchase.items,
     data.discount ?? purchase.discount,
-    data.tax ?? purchase.tax,
   );
   purchase.subtotal = totals.subtotal;
   purchase.discount = totals.discount;
@@ -156,51 +232,94 @@ export async function updatePurchaseDraft(
 
 export async function receivePurchase(params: {
   purchaseId: string;
-  performedBy?: string | null;
+  scope: StockScope;
 }) {
-  const { purchaseId, performedBy = null } = params;
+  const { purchaseId, scope } = params;
 
   return withMongoTransaction(async (session) => {
-    const purchase = await Purchase.findById(purchaseId).session(session);
-    if (!purchase) {
-      throw new InventoryError("Purchase not found.", 404);
-    }
-    if (purchase.status === "RECEIVED") {
-      throw new InventoryError("This purchase has already been received.", 409);
-    }
-    if (purchase.status === "CANCELLED") {
-      throw new InventoryError("Cancelled purchases cannot be received.", 409);
-    }
-    if (purchase.status !== "DRAFT") {
+    const receivedAt = new Date();
+    const claimed = await Purchase.findOneAndUpdate(
+      {
+        _id: purchaseId,
+        businessId: scope.businessId,
+        status: "DRAFT",
+      },
+      { $set: { status: "RECEIVED", receivedAt } },
+      { session, returnDocument: "after" },
+    );
+
+    if (!claimed) {
+      const current = await Purchase.findOne({
+        _id: purchaseId,
+        businessId: scope.businessId,
+      }).session(session);
+
+      if (!current) {
+        throw new InventoryError("Purchase not found.", 404);
+      }
+      if (current.status === "RECEIVED") {
+        throw new InventoryError(
+          "This purchase has already been received.",
+          409,
+          "ALREADY_RECEIVED",
+        );
+      }
+      if (current.status === "CANCELLED") {
+        throw new InventoryError(
+          "Cancelled purchases cannot increase stock.",
+          409,
+          "PURCHASE_CANCELLED",
+        );
+      }
       throw new InventoryError("Only draft purchases can be received.", 409);
     }
 
-    const performedById = performedBy ? new Types.ObjectId(performedBy) : null;
+    for (const item of claimed.items) {
+      const product = await Product.findOne({
+        _id: item.product,
+        businessId: scope.businessId,
+      }).session(session);
 
-    for (const item of purchase.items) {
-      await applyStockChange({
+      if (!product) {
+        throw new InventoryError(
+          `Product on this purchase was not found (${item.skuSnapshot || item.sku}).`,
+          404,
+        );
+      }
+
+      const mutated = await mutateProductStock({
+        scope,
         productId: item.product,
         quantity: item.quantity,
         movementType: "PURCHASE_RECEIVE",
-        reason: `Purchase received (${purchase.purchaseNumber})`,
-        notes: `Supplier: ${purchase.supplierName}`,
+        session,
+      });
+
+      await writeInventoryLog({
+        scope,
+        productId: mutated.product._id,
+        movementType: "PURCHASE_RECEIVE",
+        quantity: mutated.loggedQuantity,
+        previousStock: mutated.previousStock,
+        newStock: mutated.newStock,
+        reason: `Purchase received (${claimed.purchaseNumber})`,
+        notes: `Supplier: ${claimed.supplierName}`,
         referenceType: "PURCHASE",
-        referenceId: purchase._id,
-        performedBy: performedById,
+        referenceId: claimed._id,
+        referenceNumber: claimed.purchaseNumber,
         session,
       });
     }
 
-    purchase.status = "RECEIVED";
-    purchase.receivedAt = new Date();
-    await purchase.save({ session });
-
-    return purchase;
+    return claimed;
   });
 }
 
-export async function cancelPurchase(purchaseId: string) {
-  const purchase = await Purchase.findById(purchaseId);
+export async function cancelPurchase(purchaseId: string, scope: StockScope) {
+  const purchase = await Purchase.findOne({
+    _id: purchaseId,
+    businessId: scope.businessId,
+  });
   if (!purchase) {
     throw new InventoryError("Purchase not found.", 404);
   }

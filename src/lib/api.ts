@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { ZodError } from "zod";
 
+export function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function isValidObjectId(id: string): boolean {
   return Types.ObjectId.isValid(id) && new Types.ObjectId(id).toString() === id;
 }
@@ -29,7 +33,8 @@ export function handleApiError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "name" in error &&
-    (error as { name?: string }).name === "InventoryError" &&
+    ((error as { name?: string }).name === "InventoryError" ||
+      (error as { name?: string }).name === "TenantError") &&
     "status" in error &&
     "message" in error
   ) {
@@ -47,7 +52,11 @@ export function handleApiError(error: unknown) {
   ) {
     const keyPattern = (error as { keyPattern?: Record<string, number> })
       .keyPattern;
-    const field = keyPattern ? Object.keys(keyPattern)[0] : "field";
+    const keys = keyPattern ? Object.keys(keyPattern) : [];
+    const field =
+      keys.find((key) => key !== "businessId" && key !== "storeId") ??
+      keys[0] ??
+      "field";
     const labels: Record<string, string> = {
       sku: "SKU",
       barcode: "Barcode",
@@ -56,6 +65,7 @@ export function handleApiError(error: unknown) {
       name: "Name",
       adjustmentNumber: "Adjustment number",
       purchaseNumber: "Purchase number",
+      idempotencyKey: "This stock adjustment",
     };
     return jsonError(
       `${labels[field] ?? field} already exists. Please use a unique value.`,

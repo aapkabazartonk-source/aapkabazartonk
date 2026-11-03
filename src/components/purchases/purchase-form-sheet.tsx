@@ -49,6 +49,7 @@ export function PurchaseFormSheet({
     defaultValues: {
       supplierName: "",
       supplierContact: "",
+      supplierInvoiceNumber: "",
       expectedDeliveryDate: null,
       items: [
         {
@@ -60,7 +61,6 @@ export function PurchaseFormSheet({
         },
       ],
       discount: 0,
-      tax: 0,
       notes: "",
     },
   });
@@ -75,6 +75,7 @@ export function PurchaseFormSheet({
     form.reset({
       supplierName: "",
       supplierContact: "",
+      supplierInvoiceNumber: "",
       purchaseDate: new Date(),
       expectedDeliveryDate: null,
       items: [
@@ -87,7 +88,6 @@ export function PurchaseFormSheet({
         },
       ],
       discount: 0,
-      tax: 0,
       notes: "",
     });
   }, [open, form]);
@@ -102,17 +102,26 @@ export function PurchaseFormSheet({
 
   const watchedItems = form.watch("items");
   const headerDiscount = Number(form.watch("discount") || 0);
-  const headerTax = Number(form.watch("tax") || 0);
 
-  const previewTotal = useMemo(() => {
-    const lines = (watchedItems ?? []).reduce((sum, item) => {
+  const preview = useMemo(() => {
+    const items = watchedItems ?? [];
+    const subtotal = items.reduce(
+      (sum, item) =>
+        sum + Number(item.quantity || 0) * Number(item.purchasePrice || 0),
+      0,
+    );
+    const lineDiscount = items.reduce((sum, item) => {
       const gross = Number(item.quantity || 0) * Number(item.purchasePrice || 0);
-      const afterDiscount = Math.max(0, gross - Number(item.discount || 0));
-      const tax = afterDiscount * (Number(item.taxRate || 0) / 100);
-      return sum + afterDiscount + tax;
+      return sum + Math.min(gross, Number(item.discount || 0));
     }, 0);
-    return Math.max(0, lines - headerDiscount + headerTax);
-  }, [watchedItems, headerDiscount, headerTax]);
+    const tax = items.reduce((sum, item) => {
+      const gross = Number(item.quantity || 0) * Number(item.purchasePrice || 0);
+      const taxable = Math.max(0, gross - Number(item.discount || 0));
+      return sum + taxable * (Number(item.taxRate || 0) / 100);
+    }, 0);
+    const total = Math.max(0, subtotal - lineDiscount - headerDiscount + tax);
+    return { subtotal, discount: lineDiscount + headerDiscount, tax, total };
+  }, [watchedItems, headerDiscount]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -140,11 +149,25 @@ export function PurchaseFormSheet({
                 </p>
               ) : null}
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="supplier-contact">Supplier contact</Label>
+            <div className="space-y-2">
+              <Label htmlFor="supplier-contact">Supplier phone</Label>
               <Input
                 id="supplier-contact"
                 {...form.register("supplierContact")}
+                placeholder="Optional"
+              />
+              {form.formState.errors.supplierContact ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.supplierContact.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="supplier-invoice">Supplier invoice number</Label>
+              <Input
+                id="supplier-invoice"
+                {...form.register("supplierInvoiceNumber")}
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -274,7 +297,7 @@ export function PurchaseFormSheet({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Tax rate %</Label>
+                    <Label>GST rate %</Label>
                     <Input
                       type="number"
                       min={0}
@@ -302,20 +325,32 @@ export function PurchaseFormSheet({
             ) : null}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Header discount</Label>
-              <Input type="number" min={0} step="0.01" {...form.register("discount")} />
-            </div>
-            <div className="space-y-2">
-              <Label>Header tax</Label>
-              <Input type="number" min={0} step="0.01" {...form.register("tax")} />
-            </div>
+          <div className="space-y-2">
+            <Label>Invoice discount</Label>
+            <Input type="number" min={0} step="0.01" {...form.register("discount")} />
+            <p className="text-xs text-muted-foreground">
+              GST is calculated on each line. Leave the rate at 0 for non-GST
+              purchases. Drafts do not change stock.
+            </p>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/50 px-4 py-3 text-sm">
-            Estimated total:{" "}
-            <span className="font-semibold">{formatCurrency(previewTotal)}</span>
+          <div className="space-y-1 rounded-xl border border-border bg-secondary/50 px-4 py-3 text-sm">
+            <p className="flex justify-between">
+              <span>Subtotal</span>
+              <span>{formatCurrency(preview.subtotal)}</span>
+            </p>
+            <p className="flex justify-between">
+              <span>Discount</span>
+              <span>{formatCurrency(preview.discount)}</span>
+            </p>
+            <p className="flex justify-between">
+              <span>GST</span>
+              <span>{formatCurrency(preview.tax)}</span>
+            </p>
+            <p className="flex justify-between font-semibold">
+              <span>Total</span>
+              <span>{formatCurrency(preview.total)}</span>
+            </p>
           </div>
 
           <div className="space-y-2">

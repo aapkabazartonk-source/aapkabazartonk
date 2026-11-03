@@ -1,5 +1,3 @@
-import { connectToDatabase } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth";
 import {
   handleApiError,
   isValidObjectId,
@@ -7,7 +5,11 @@ import {
   jsonOk,
   parsePagination,
 } from "@/lib/api";
-import { createStockAdjustment } from "@/lib/inventory-stock";
+import {
+  createStockAdjustment,
+  scopeFromTenant,
+} from "@/lib/inventory-stock";
+import { requireTenant } from "@/lib/tenant";
 import { stockAdjustmentCreateSchema } from "@/lib/validators/inventory";
 import { StockAdjustment } from "@/models/StockAdjustment";
 import { User } from "@/models/User";
@@ -17,13 +19,15 @@ void User;
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
     const productId = searchParams.get("productId");
     const adjustmentType = searchParams.get("adjustmentType");
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+    };
     if (productId) {
       if (!isValidObjectId(productId)) {
         return jsonError("Invalid product ID.", 400);
@@ -59,8 +63,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectToDatabase();
-    const auth = await getAuthContext(request);
+    const tenant = await requireTenant(request);
     const body = await request.json();
     const parsed = stockAdjustmentCreateSchema.parse(body);
 
@@ -68,22 +71,27 @@ export async function POST(request: Request) {
       return jsonError("Invalid product ID.", 400);
     }
 
-    const adjustment = await createStockAdjustment({
+    const headerKey = request.headers.get("Idempotency-Key")?.trim();
+    const result = await createStockAdjustment({
+      scope: scopeFromTenant(tenant),
       productId: parsed.productId,
       adjustmentType: parsed.adjustmentType,
       quantity: parsed.quantity,
       reason: parsed.reason,
       notes: parsed.notes,
       referenceNumber: parsed.referenceNumber,
-      createdBy: auth.userId,
+      idempotencyKey: headerKey || parsed.idempotencyKey,
     });
 
-    const populated = await StockAdjustment.findById(adjustment._id)
+    const populated = await StockAdjustment.findOne({
+      _id: result.adjustment._id,
+      businessId: tenant.businessId,
+    })
       .populate("product", "name sku currentStock minStockLevel")
       .populate("createdBy", "name email")
       .lean();
 
-    return jsonOk({ data: populated }, 201);
+    return jsonOk({ data: populated, replayed: result.replayed }, result.replayed ? 200 : 201);
   } catch (error) {
     return handleApiError(error);
   }

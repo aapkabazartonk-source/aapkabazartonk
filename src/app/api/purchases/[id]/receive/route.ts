@@ -1,19 +1,18 @@
-import { connectToDatabase } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth";
 import {
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
 } from "@/lib/api";
+import { scopeFromTenant } from "@/lib/inventory-stock";
 import { receivePurchase } from "@/lib/purchase-service";
+import { requireTenant } from "@/lib/tenant";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
-    const auth = await getAuthContext(request);
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
@@ -22,7 +21,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const purchase = await receivePurchase({
       purchaseId: id,
-      performedBy: auth.userId,
+      scope: scopeFromTenant(tenant),
     });
 
     return jsonOk({

@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiClientError, fetchJson } from "@/lib/fetch-json";
+import { reorderRuleSummary } from "@/lib/reorder";
 import { formatNumber } from "@/lib/utils";
 import type { StockAdjustmentCreateValues } from "@/lib/validators/inventory";
 import type { CategoryRecord } from "@/types/catalog";
@@ -121,7 +122,7 @@ export function InventoryAlertsManager() {
     <div className="space-y-6">
       <PageHeader
         title="Stock alerts"
-        description="Live low-stock and out-of-stock products based on minimum levels."
+        description={reorderRuleSummary(stats?.reorderMultiple ?? 2)}
         actions={
           <Button variant="outline" asChild>
             <Link href="/dashboard/inventory">Back to inventory</Link>

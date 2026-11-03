@@ -32,6 +32,9 @@ const OrderSchema = new Schema(
     },
     notes: { type: String },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    /** Reserved for Phase 4 sales. Sale movements will reference this order. */
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    storeId: { type: Schema.Types.ObjectId, ref: "Store" },
   },
   { timestamps: true },
 );

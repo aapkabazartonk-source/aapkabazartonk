@@ -290,6 +290,11 @@ export function PurchasesManager() {
                               {purchase.supplierContact}
                             </p>
                           ) : null}
+                          {purchase.supplierInvoiceNumber ? (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              Inv {purchase.supplierInvoiceNumber}
+                            </p>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell>{formatDate(purchase.purchaseDate)}</TableCell>

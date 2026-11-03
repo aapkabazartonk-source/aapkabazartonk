@@ -242,7 +242,7 @@ export function InventoryHistoryManager() {
                     <TableHead className="text-right">New</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Reason</TableHead>
-                    <TableHead>Created by</TableHead>
+                    <TableHead>User</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -284,11 +284,10 @@ export function InventoryHistoryManager() {
                         <TableCell className="text-right font-medium">
                           {formatNumber(Number(row.newStock))}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {String(row.referenceType)}
-                          {row.referenceId
-                            ? ` · ${String(row.referenceId).slice(-6)}`
-                            : ""}
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.referenceNumber
+                            ? String(row.referenceNumber)
+                            : "—"}
                         </TableCell>
                         <TableCell className="max-w-[180px] truncate text-sm">
                           {String(row.reason)}

@@ -14,6 +14,8 @@ import {
 export { PRODUCT_UNITS, type ProductUnit };
 
 export interface IProduct {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId | null;
   name: string;
   sku: string;
   barcode: string;
@@ -33,6 +35,18 @@ export interface IProduct {
 
 const ProductSchema = new Schema<IProduct>(
   {
+    businessId: {
+      type: Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Store",
+      default: null,
+      index: true,
+    },
     name: {
       type: String,
       required: [true, "Product name is required"],
@@ -107,9 +121,9 @@ const ProductSchema = new Schema<IProduct>(
   { timestamps: true },
 );
 
-ProductSchema.index({ sku: 1 }, { unique: true });
+ProductSchema.index({ businessId: 1, sku: 1 }, { unique: true });
 ProductSchema.index(
-  { barcode: 1 },
+  { businessId: 1, barcode: 1 },
   {
     unique: true,
     partialFilterExpression: { barcode: { $type: "string", $gt: "" } },

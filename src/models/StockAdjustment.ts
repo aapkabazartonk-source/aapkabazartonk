@@ -14,7 +14,10 @@ import {
 } from "@/lib/constants";
 
 export interface IStockAdjustment {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId;
   adjustmentNumber: string;
+  idempotencyKey?: string | null;
   product: Types.ObjectId;
   adjustmentType: StockAdjustmentType;
   quantity: number;
@@ -31,11 +34,27 @@ export interface IStockAdjustment {
 
 const StockAdjustmentSchema = new Schema<IStockAdjustment>(
   {
+    businessId: {
+      type: Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
     adjustmentNumber: {
       type: String,
       required: true,
       trim: true,
       uppercase: true,
+    },
+    idempotencyKey: {
+      type: String,
+      trim: true,
+      maxlength: 80,
     },
     product: {
       type: Schema.Types.ObjectId,
@@ -97,9 +116,19 @@ const StockAdjustmentSchema = new Schema<IStockAdjustment>(
   { timestamps: true },
 );
 
-StockAdjustmentSchema.index({ adjustmentNumber: 1 }, { unique: true });
-StockAdjustmentSchema.index({ createdAt: -1 });
-StockAdjustmentSchema.index({ product: 1, createdAt: -1 });
+StockAdjustmentSchema.index(
+  { businessId: 1, adjustmentNumber: 1 },
+  { unique: true },
+);
+StockAdjustmentSchema.index(
+  { businessId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  },
+);
+StockAdjustmentSchema.index({ businessId: 1, createdAt: -1 });
+StockAdjustmentSchema.index({ businessId: 1, product: 1, createdAt: -1 });
 
 export type StockAdjustmentDocument = InferSchemaType<
   typeof StockAdjustmentSchema

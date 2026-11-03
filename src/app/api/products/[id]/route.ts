@@ -1,11 +1,11 @@
 import { Types } from "mongoose";
-import { connectToDatabase } from "@/lib/db";
 import {
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
 } from "@/lib/api";
+import { requireTenant } from "@/lib/tenant";
 import {
   assertUniqueBarcode,
   assertUniqueSku,
@@ -27,16 +27,19 @@ function serializeProduct(product: Record<string, unknown>) {
   };
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid product ID.", 400);
     }
 
-    const product = await Product.findById(id)
+    const product = await Product.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    })
       .populate("category", "name slug isActive")
       .populate("subcategory", "name slug")
       .lean();
@@ -55,14 +58,17 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid product ID.", 400);
     }
 
-    const existing = await Product.findById(id);
+    const existing = await Product.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    });
     if (!existing) {
       return jsonError("Product not found.", 404);
     }
@@ -95,16 +101,23 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (parsed.category !== undefined || parsed.subcategory !== undefined) {
       await assertValidCategoryRefs(nextCategory, nextSubcategory, {
         requireActive: true,
+        businessId: tenant.businessId,
       });
     }
 
     if (parsed.sku !== undefined) {
-      await assertUniqueSku(parsed.sku, id);
+      await assertUniqueSku(parsed.sku, {
+        businessId: tenant.businessId,
+        excludeId: id,
+      });
       existing.sku = parsed.sku;
     }
 
     if (parsed.barcode !== undefined) {
-      await assertUniqueBarcode(parsed.barcode, id);
+      await assertUniqueBarcode(parsed.barcode, {
+        businessId: tenant.businessId,
+        excludeId: id,
+      });
       existing.barcode = parsed.barcode.trim();
     }
 
@@ -150,16 +163,21 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid product ID.", 400);
     }
 
-    const existing = await Product.findById(id).select("_id name").lean();
+    const existing = await Product.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    })
+      .select("_id name")
+      .lean();
     if (!existing) {
       return jsonError("Product not found.", 404);
     }
@@ -172,7 +190,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       );
     }
 
-    await Product.findByIdAndDelete(id);
+    await Product.deleteOne({ _id: id, businessId: tenant.businessId });
     return jsonOk({ data: { id }, message: "Product deleted successfully." });
   } catch (error) {
     return handleApiError(error);

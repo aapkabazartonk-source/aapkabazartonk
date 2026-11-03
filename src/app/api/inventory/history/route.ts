@@ -1,5 +1,5 @@
-import { connectToDatabase } from "@/lib/db";
 import {
+  escapeRegex,
   handleApiError,
   isValidObjectId,
   jsonError,
@@ -7,6 +7,7 @@ import {
   parsePagination,
 } from "@/lib/api";
 import { INVENTORY_MOVEMENT_TYPES } from "@/lib/constants";
+import { requireTenant } from "@/lib/tenant";
 import { InventoryLog } from "@/models/InventoryLog";
 import { Product } from "@/models/Product";
 import { User } from "@/models/User";
@@ -16,7 +17,7 @@ void User;
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
@@ -27,7 +28,10 @@ export async function GET(request: Request) {
     const to = searchParams.get("to");
     const format = searchParams.get("format");
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+    };
+    const safeSearch = escapeRegex(search);
 
     if (
       movementType &&
@@ -54,6 +58,7 @@ export async function GET(request: Request) {
         return jsonError("Invalid category filter.", 400);
       }
       const productIds = await Product.find({
+        businessId: tenant.businessId,
         $or: [{ category: categoryId }, { subcategory: categoryId }],
       })
         .select("_id")
@@ -63,9 +68,10 @@ export async function GET(request: Request) {
 
     if (search) {
       const matchedProducts = await Product.find({
+        businessId: tenant.businessId,
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { sku: { $regex: search, $options: "i" } },
+          { name: { $regex: safeSearch, $options: "i" } },
+          { sku: { $regex: safeSearch, $options: "i" } },
         ],
       })
         .select("_id")
@@ -73,8 +79,9 @@ export async function GET(request: Request) {
 
       filter.$or = [
         { product: { $in: matchedProducts.map((p) => p._id) } },
-        { reason: { $regex: search, $options: "i" } },
-        { notes: { $regex: search, $options: "i" } },
+        { reason: { $regex: safeSearch, $options: "i" } },
+        { referenceNumber: { $regex: safeSearch, $options: "i" } },
+        { notes: { $regex: safeSearch, $options: "i" } },
       ];
     }
 
@@ -94,11 +101,9 @@ export async function GET(request: Request) {
         "Previous Stock",
         "Quantity",
         "New Stock",
-        "Reference Type",
-        "Reference ID",
+        "Reference Number",
         "Reason",
-        "Notes",
-        "Created By",
+        "User",
       ];
 
       const escape = (value: unknown) => {
@@ -127,10 +132,8 @@ export async function GET(request: Request) {
             row.previousStock,
             row.quantity,
             row.newStock,
-            row.referenceType,
-            row.referenceId ? String(row.referenceId) : "",
+            row.referenceNumber || "",
             row.reason,
-            row.notes ?? "",
             performer?.name || performer?.email || "",
           ]
             .map(escape)

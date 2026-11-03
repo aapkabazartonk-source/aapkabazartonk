@@ -6,27 +6,35 @@ import {
   type Model,
   type Types,
 } from "mongoose";
-import {
-  PURCHASE_STATUSES,
-  type PurchaseStatus,
-} from "@/lib/constants";
+import { PURCHASE_STATUSES, type PurchaseStatus } from "@/lib/constants";
 
 export interface IPurchaseItem {
   product: Types.ObjectId;
+  /** Legacy snapshot field kept in sync with productNameSnapshot. */
   productName: string;
+  /** Legacy snapshot field kept in sync with skuSnapshot. */
   sku: string;
+  productNameSnapshot: string;
+  skuSnapshot: string;
   quantity: number;
   purchasePrice: number;
   taxRate: number;
   discount: number;
+  taxAmount: number;
   total: number;
 }
 
 export interface IPurchase {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId;
   purchaseNumber: string;
   supplierName: string;
   supplierContact: string;
-  /** Reserved for Phase 4+ supplier directory linkage */
+  supplierInvoiceNumber: string;
+  /**
+   * Optional link to the existing Supplier directory.
+   * Phase 6 can require this without a second supplier model.
+   */
   supplier?: Types.ObjectId | null;
   purchaseDate: Date;
   expectedDeliveryDate?: Date | null;
@@ -61,10 +69,21 @@ const PurchaseItemSchema = new Schema<IPurchaseItem>(
       trim: true,
       uppercase: true,
     },
+    productNameSnapshot: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    skuSnapshot: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
     quantity: {
       type: Number,
       required: true,
-      min: [1, "Quantity must be at least 1"],
+      min: [0.001, "Quantity must be greater than 0"],
     },
     purchasePrice: {
       type: Number,
@@ -75,11 +94,18 @@ const PurchaseItemSchema = new Schema<IPurchaseItem>(
       type: Number,
       default: 0,
       min: 0,
+      max: 100,
     },
     discount: {
       type: Number,
       default: 0,
       min: 0,
+    },
+    taxAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
     },
     total: {
       type: Number,
@@ -92,6 +118,17 @@ const PurchaseItemSchema = new Schema<IPurchaseItem>(
 
 const PurchaseSchema = new Schema<IPurchase>(
   {
+    businessId: {
+      type: Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
     purchaseNumber: {
       type: String,
       required: true,
@@ -108,7 +145,13 @@ const PurchaseSchema = new Schema<IPurchase>(
       type: String,
       default: "",
       trim: true,
-      maxlength: [200, "Supplier contact cannot exceed 200 characters"],
+      maxlength: [30, "Supplier phone cannot exceed 30 characters"],
+    },
+    supplierInvoiceNumber: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: [100, "Supplier invoice number cannot exceed 100 characters"],
     },
     supplier: {
       type: Schema.Types.ObjectId,
@@ -130,7 +173,8 @@ const PurchaseSchema = new Schema<IPurchase>(
       type: [PurchaseItemSchema],
       required: true,
       validate: {
-        validator: (items: IPurchaseItem[]) => Array.isArray(items) && items.length > 0,
+        validator: (items: IPurchaseItem[]) =>
+          Array.isArray(items) && items.length > 0,
         message: "Purchase must include at least one item",
       },
     },
@@ -179,10 +223,10 @@ const PurchaseSchema = new Schema<IPurchase>(
   { timestamps: true },
 );
 
-PurchaseSchema.index({ purchaseNumber: 1 }, { unique: true });
-PurchaseSchema.index({ createdAt: -1 });
-PurchaseSchema.index({ status: 1, purchaseDate: -1 });
-PurchaseSchema.index({ supplierName: 1 });
+PurchaseSchema.index({ businessId: 1, purchaseNumber: 1 }, { unique: true });
+PurchaseSchema.index({ businessId: 1, createdAt: -1 });
+PurchaseSchema.index({ businessId: 1, status: 1, purchaseDate: -1 });
+PurchaseSchema.index({ businessId: 1, supplierName: 1 });
 
 export type PurchaseDocument = InferSchemaType<typeof PurchaseSchema> & {
   _id: Types.ObjectId;

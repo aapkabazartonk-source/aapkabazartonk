@@ -8,6 +8,7 @@ import {
 } from "mongoose";
 
 export interface ICategory {
+  businessId: Types.ObjectId;
   name: string;
   normalizedName: string;
   slug: string;
@@ -21,6 +22,12 @@ export interface ICategory {
 
 const CategorySchema = new Schema<ICategory>(
   {
+    businessId: {
+      type: Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: [true, "Category name is required"],
@@ -65,8 +72,8 @@ const CategorySchema = new Schema<ICategory>(
   { timestamps: true },
 );
 
-CategorySchema.index({ normalizedName: 1 }, { unique: true });
-CategorySchema.index({ slug: 1 }, { unique: true });
+CategorySchema.index({ businessId: 1, normalizedName: 1 }, { unique: true });
+CategorySchema.index({ businessId: 1, slug: 1 }, { unique: true });
 CategorySchema.index({ parentCategory: 1, isActive: 1 });
 
 export type CategoryDocument = InferSchemaType<typeof CategorySchema> & {

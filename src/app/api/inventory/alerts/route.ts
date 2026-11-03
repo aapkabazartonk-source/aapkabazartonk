@@ -1,5 +1,5 @@
-import { connectToDatabase } from "@/lib/db";
 import {
+  escapeRegex,
   handleApiError,
   isValidObjectId,
   jsonError,
@@ -7,11 +7,13 @@ import {
   parsePagination,
 } from "@/lib/api";
 import { getStockStatus } from "@/lib/product-rules";
+import { suggestedReorderQuantity } from "@/lib/reorder";
+import { requireTenant } from "@/lib/tenant";
 import { Product } from "@/models/Product";
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
@@ -19,7 +21,11 @@ export async function GET(request: Request) {
     const status = searchParams.get("status"); // low_stock | out_of_stock | all
     const categoryId = searchParams.get("category");
 
-    const filter: Record<string, unknown> = { isActive: true };
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+      isActive: true,
+    };
+    const safeSearch = escapeRegex(search);
 
     if (categoryId) {
       if (!isValidObjectId(categoryId)) {
@@ -33,8 +39,8 @@ export async function GET(request: Request) {
         ...(Array.isArray(filter.$and) ? (filter.$and as object[]) : []),
         {
           $or: [
-            { name: { $regex: search, $options: "i" } },
-            { sku: { $regex: search, $options: "i" } },
+            { name: { $regex: safeSearch, $options: "i" } },
+            { sku: { $regex: safeSearch, $options: "i" } },
           ],
         },
       ];
@@ -66,6 +72,7 @@ export async function GET(request: Request) {
         .limit(limit)
         .lean(),
       Product.countDocuments({
+        businessId: tenant.businessId,
         isActive: true,
         $expr: {
           $and: [
@@ -74,7 +81,11 @@ export async function GET(request: Request) {
           ],
         },
       }),
-      Product.countDocuments({ isActive: true, currentStock: { $lte: 0 } }),
+      Product.countDocuments({
+        businessId: tenant.businessId,
+        isActive: true,
+        currentStock: { $lte: 0 },
+      }),
     ]);
 
     return jsonOk({
@@ -82,10 +93,11 @@ export async function GET(request: Request) {
         const currentStock = Number(product.currentStock ?? 0);
         const minStockLevel = Number(product.minStockLevel ?? 0);
         const stockStatus = getStockStatus(currentStock, minStockLevel);
-        const suggestedReorder =
-          stockStatus === "out_of_stock"
-            ? Math.max(minStockLevel * 2, 1)
-            : Math.max(minStockLevel * 2 - currentStock, minStockLevel);
+        const suggestedReorder = suggestedReorderQuantity(
+          currentStock,
+          minStockLevel,
+          tenant.reorderMultiple,
+        );
 
         return {
           ...product,
@@ -103,6 +115,7 @@ export async function GET(request: Request) {
         lowStockProducts: lowCount,
         outOfStockProducts: outCount,
         totalAlerts: lowCount + outCount,
+        reorderMultiple: tenant.reorderMultiple,
       },
     });
   } catch (error) {

@@ -1,11 +1,12 @@
-import { connectToDatabase } from "@/lib/db";
 import {
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
 } from "@/lib/api";
+import { scopeFromTenant } from "@/lib/inventory-stock";
 import { updatePurchaseDraft } from "@/lib/purchase-service";
+import { requireTenant } from "@/lib/tenant";
 import { purchaseUpdateSchema } from "@/lib/validators/purchase";
 import { Purchase } from "@/models/Purchase";
 import { Supplier } from "@/models/Supplier";
@@ -16,16 +17,19 @@ void Supplier;
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
       return jsonError("Invalid purchase ID.", 400);
     }
 
-    const purchase = await Purchase.findById(id)
+    const purchase = await Purchase.findOne({
+      _id: id,
+      businessId: tenant.businessId,
+    })
       .populate("createdBy", "name email")
       .populate("supplier", "name phone email")
       .lean();
@@ -42,7 +46,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { id } = await context.params;
 
     if (!isValidObjectId(id)) {
@@ -51,7 +55,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const body = await request.json();
     const parsed = purchaseUpdateSchema.parse(body);
-    const purchase = await updatePurchaseDraft(id, parsed);
+    const purchase = await updatePurchaseDraft(
+      id,
+      parsed,
+      scopeFromTenant(tenant),
+    );
 
     return jsonOk({ data: purchase.toObject() });
   } catch (error) {

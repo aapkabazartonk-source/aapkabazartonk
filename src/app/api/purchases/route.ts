@@ -1,24 +1,28 @@
-import { connectToDatabase } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth";
 import {
+  escapeRegex,
   handleApiError,
   jsonOk,
   parsePagination,
 } from "@/lib/api";
+import { scopeFromTenant } from "@/lib/inventory-stock";
 import { createPurchaseDraft } from "@/lib/purchase-service";
+import { requireTenant } from "@/lib/tenant";
 import { PURCHASE_STATUSES } from "@/lib/constants";
 import { purchaseCreateSchema } from "@/lib/validators/purchase";
 import { Purchase } from "@/models/Purchase";
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
     const search = (searchParams.get("search") || "").trim();
     const status = searchParams.get("status");
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+    };
+    const safeSearch = escapeRegex(search);
     if (
       status &&
       PURCHASE_STATUSES.includes(status as (typeof PURCHASE_STATUSES)[number])
@@ -28,10 +32,13 @@ export async function GET(request: Request) {
 
     if (search) {
       filter.$or = [
-        { purchaseNumber: { $regex: search, $options: "i" } },
-        { supplierName: { $regex: search, $options: "i" } },
-        { "items.productName": { $regex: search, $options: "i" } },
-        { "items.sku": { $regex: search, $options: "i" } },
+        { purchaseNumber: { $regex: safeSearch, $options: "i" } },
+        { supplierName: { $regex: safeSearch, $options: "i" } },
+        { supplierInvoiceNumber: { $regex: safeSearch, $options: "i" } },
+        { "items.productName": { $regex: safeSearch, $options: "i" } },
+        { "items.productNameSnapshot": { $regex: safeSearch, $options: "i" } },
+        { "items.sku": { $regex: safeSearch, $options: "i" } },
+        { "items.skuSnapshot": { $regex: safeSearch, $options: "i" } },
       ];
     }
 
@@ -43,9 +50,18 @@ export async function GET(request: Request) {
           .skip(skip)
           .limit(limit)
           .lean(),
-        Purchase.countDocuments({ status: "DRAFT" }),
-        Purchase.countDocuments({ status: "RECEIVED" }),
-        Purchase.countDocuments({ status: "CANCELLED" }),
+        Purchase.countDocuments({
+          businessId: tenant.businessId,
+          status: "DRAFT",
+        }),
+        Purchase.countDocuments({
+          businessId: tenant.businessId,
+          status: "RECEIVED",
+        }),
+        Purchase.countDocuments({
+          businessId: tenant.businessId,
+          status: "CANCELLED",
+        }),
       ]);
 
     return jsonOk({
@@ -70,14 +86,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectToDatabase();
-    const auth = await getAuthContext(request);
+    const tenant = await requireTenant(request);
     const body = await request.json();
     const parsed = purchaseCreateSchema.parse(body);
 
     const purchase = await createPurchaseDraft({
       data: parsed,
-      createdBy: auth.userId,
+      scope: scopeFromTenant(tenant),
     });
 
     return jsonOk({ data: purchase.toObject() }, 201);

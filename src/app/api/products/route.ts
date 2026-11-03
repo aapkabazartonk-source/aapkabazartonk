@@ -1,13 +1,17 @@
 import { Types } from "mongoose";
-import { connectToDatabase } from "@/lib/db";
 import {
+  escapeRegex,
   handleApiError,
   isValidObjectId,
   jsonError,
   jsonOk,
   parsePagination,
 } from "@/lib/api";
-import { createProductWithOpeningStock } from "@/lib/inventory-stock";
+import {
+  createProductWithOpeningStock,
+  scopeFromTenant,
+} from "@/lib/inventory-stock";
+import { requireTenant } from "@/lib/tenant";
 import {
   assertUniqueBarcode,
   assertUniqueSku,
@@ -29,7 +33,7 @@ function serializeProduct(product: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, skip } = parsePagination(searchParams);
@@ -40,7 +44,9 @@ export async function GET(request: Request) {
     const sort = searchParams.get("sort") || "createdAt";
     const order = searchParams.get("order") === "asc" ? 1 : -1;
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      businessId: tenant.businessId,
+    };
 
     if (status === "active") filter.isActive = true;
     if (status === "inactive") filter.isActive = false;
@@ -57,9 +63,9 @@ export async function GET(request: Request) {
         ...(Array.isArray(filter.$and) ? (filter.$and as object[]) : []),
         {
           $or: [
-            { name: { $regex: search, $options: "i" } },
-            { sku: { $regex: search, $options: "i" } },
-            { barcode: { $regex: search, $options: "i" } },
+            { name: { $regex: escapeRegex(search), $options: "i" } },
+            { sku: { $regex: escapeRegex(search), $options: "i" } },
+            { barcode: { $regex: escapeRegex(search), $options: "i" } },
           ],
         },
       ];
@@ -106,9 +112,10 @@ export async function GET(request: Request) {
         .skip(skip)
         .limit(limit)
         .lean(),
-      Product.countDocuments(),
-      Product.countDocuments({ isActive: true }),
+      Product.countDocuments({ businessId: tenant.businessId }),
+      Product.countDocuments({ businessId: tenant.businessId, isActive: true }),
       Product.countDocuments({
+        businessId: tenant.businessId,
         $expr: {
           $and: [
             { $gt: ["$currentStock", 0] },
@@ -117,6 +124,7 @@ export async function GET(request: Request) {
         },
       }),
       Product.aggregate<{ value: number }>([
+        { $match: { businessId: tenant.businessId } },
         {
           $group: {
             _id: null,
@@ -152,7 +160,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectToDatabase();
+    const tenant = await requireTenant(request);
+    const scope = scopeFromTenant(tenant);
 
     const body = await request.json();
     const parsed = productCreateSchema.parse(body);
@@ -163,13 +172,18 @@ export async function POST(request: Request) {
 
     await assertValidCategoryRefs(parsed.category, parsed.subcategory, {
       requireActive: true,
+      businessId: tenant.businessId,
     });
-    await assertUniqueSku(parsed.sku);
-    await assertUniqueBarcode(parsed.barcode);
+    await assertUniqueSku(parsed.sku, { businessId: tenant.businessId });
+    await assertUniqueBarcode(parsed.barcode, {
+      businessId: tenant.businessId,
+    });
 
     const images = (parsed.images ?? []).filter((url) => url.trim().length > 0);
 
     const productData = {
+      businessId: tenant.businessId,
+      storeId: tenant.storeId,
       name: parsed.name.trim(),
       sku: parsed.sku,
       barcode: (parsed.barcode ?? "").trim(),
@@ -191,6 +205,7 @@ export async function POST(request: Request) {
       product = await createProductWithOpeningStock({
         productData,
         openingStock: parsed.currentStock,
+        scope,
       });
     } else {
       product = await Product.create({

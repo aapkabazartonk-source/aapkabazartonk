@@ -66,6 +66,7 @@ export function StockAdjustmentSheet({
       reason: "",
       notes: "",
       referenceNumber: "",
+      idempotencyKey: crypto.randomUUID(),
     },
   });
 
@@ -78,6 +79,7 @@ export function StockAdjustmentSheet({
       reason: "",
       notes: "",
       referenceNumber: "",
+      idempotencyKey: crypto.randomUUID(),
     });
 
     let cancelled = false;
@@ -116,6 +118,7 @@ export function StockAdjustmentSheet({
             await onSubmit(values);
           })}
         >
+          <input type="hidden" {...form.register("idempotencyKey")} />
           <div className="space-y-2">
             <Label>Product</Label>
             <Controller

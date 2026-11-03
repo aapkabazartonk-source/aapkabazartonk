@@ -33,7 +33,9 @@ export interface InventoryOverviewResponse {
     lowStockAlerts: Array<Record<string, unknown>>;
     outOfStockProducts: Array<Record<string, unknown>>;
     recentMovements: Array<Record<string, unknown>>;
-    recentlyUpdated: Array<Record<string, unknown>>;
+    recentAdjustments: Array<Record<string, unknown>>;
+    recentPurchases: Array<Record<string, unknown>>;
+    reorderMultiple: number;
   };
 }
 
@@ -49,6 +51,7 @@ export interface InventoryAlertsResponse {
     lowStockProducts: number;
     outOfStockProducts: number;
     totalAlerts: number;
+    reorderMultiple: number;
   };
 }
 
@@ -57,16 +60,20 @@ export interface PurchaseRecord {
   purchaseNumber: string;
   supplierName: string;
   supplierContact?: string;
+  supplierInvoiceNumber?: string;
   purchaseDate: string;
   expectedDeliveryDate?: string | null;
   items: Array<{
     product: string;
     productName: string;
+    productNameSnapshot?: string;
     sku: string;
+    skuSnapshot?: string;
     quantity: number;
     purchasePrice: number;
     taxRate: number;
     discount: number;
+    taxAmount?: number;
     total: number;
   }>;
   subtotal: number;

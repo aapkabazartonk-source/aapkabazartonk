@@ -1,42 +1,77 @@
 import mongoose, { Types, type ClientSession } from "mongoose";
-import type { InventoryMovementType, StockAdjustmentType } from "@/lib/constants";
+import {
+  STOCK_IN_MOVEMENT_TYPES,
+  type InventoryMovementType,
+  type InventoryReferenceType,
+  type StockAdjustmentType,
+} from "@/lib/constants";
 import { nextDailySequence } from "@/lib/document-numbers";
 import { InventoryLog } from "@/models/InventoryLog";
 import { Product } from "@/models/Product";
 import { StockAdjustment } from "@/models/StockAdjustment";
 
+/**
+ * Stock changes run only inside a MongoDB transaction.
+ * There is no standalone fallback. Atlas (a replica set) is required.
+ *
+ * Updates use compare-and-swap on currentStock so two concurrent operations
+ * cannot both apply a stale balance. Purchase receiving claims DRAFT status
+ * with a conditional update so the same purchase cannot be received twice.
+ */
 export class InventoryError extends Error {
   status: number;
+  code: string;
 
-  constructor(message: string, status = 400) {
+  constructor(message: string, status = 400, code = "INVENTORY_ERROR") {
     super(message);
     this.name = "InventoryError";
     this.status = status;
+    this.code = code;
   }
 }
 
-export function isStockIncreasing(type: StockAdjustmentType | InventoryMovementType) {
-  return type === "STOCK_IN" || type === "OPENING_STOCK" || type === "PURCHASE_RECEIVE";
+const INCREASING = new Set<string>(STOCK_IN_MOVEMENT_TYPES);
+
+export function isStockIncreasing(type: InventoryMovementType | StockAdjustmentType) {
+  return INCREASING.has(type);
+}
+
+export type StockScope = {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  performedBy?: Types.ObjectId | null;
+};
+
+export function scopeFromTenant(tenant: {
+  businessId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  userId: string | null;
+}): StockScope {
+  return {
+    businessId: tenant.businessId,
+    storeId: tenant.storeId,
+    performedBy: tenant.userId ? new Types.ObjectId(tenant.userId) : null,
+  };
 }
 
 export function computeNextStock(params: {
   previousStock: number;
   quantity: number;
-  adjustmentType: StockAdjustmentType;
+  movementType: InventoryMovementType;
 }) {
-  const { previousStock, quantity, adjustmentType } = params;
-
-  if (!Number.isFinite(quantity) || quantity < 0) {
-    throw new InventoryError("Quantity must be a non-negative number.");
-  }
-
+  const { previousStock, quantity, movementType } = params;
   let newStock: number;
   let loggedQuantity: number;
 
-  if (adjustmentType === "CORRECTION") {
+  if (movementType === "CORRECTION") {
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      throw new InventoryError("Corrected stock cannot be negative.");
+    }
     newStock = quantity;
     loggedQuantity = Math.abs(newStock - previousStock);
-  } else if (isStockIncreasing(adjustmentType)) {
+  } else if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new InventoryError("Quantity must be greater than 0.");
+  } else if (isStockIncreasing(movementType)) {
     newStock = previousStock + quantity;
     loggedQuantity = quantity;
   } else {
@@ -48,234 +83,356 @@ export function computeNextStock(params: {
     throw new InventoryError(
       `Insufficient stock. Available: ${previousStock}, requested: ${quantity}.`,
       409,
+      "INSUFFICIENT_STOCK",
     );
   }
 
-  return {
-    previousStock,
-    newStock,
-    loggedQuantity,
-    movementType: adjustmentType as InventoryMovementType,
-  };
+  return { previousStock, newStock, loggedQuantity, movementType };
 }
 
 export async function withMongoTransaction<T>(
   work: (session: ClientSession) => Promise<T>,
 ): Promise<T> {
-  const session = await mongoose.startSession();
-  try {
-    let result!: T;
-    await session.withTransaction(async () => {
-      result = await work(session);
-    });
-    return result;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes("Transaction numbers are only allowed") ||
-        error.message.includes("replica set") ||
-        error.message.includes("mongos"))
-    ) {
-      throw new InventoryError(
-        "Stock-changing operations require a MongoDB replica set (e.g. Atlas). Local standalone MongoDB does not support transactions.",
-        503,
-      );
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const session = await mongoose.startSession();
+    try {
+      let result!: T;
+      await session.withTransaction(async () => {
+        result = await work(session);
+      });
+      return result;
+    } catch (error) {
+      lastError = mapTransactionError(error);
+      const code = lastError instanceof InventoryError ? lastError.code : "";
+      const retryable =
+        code === "STOCK_CONFLICT" || isDuplicateDocumentNumber(error);
+      if (retryable && attempt < 7) {
+        continue;
+      }
+      throw lastError;
+    } finally {
+      await session.endSession();
     }
-    throw error;
-  } finally {
-    await session.endSession();
   }
+
+  throw lastError;
 }
 
-type ApplyStockChangeInput = {
+function mapTransactionError(error: unknown) {
+  if (error instanceof InventoryError) return error;
+  if (
+    error instanceof Error &&
+    /Transaction numbers are only allowed|replica set|mongos/i.test(error.message)
+  ) {
+    return new InventoryError(
+      "Stock-changing operations require a MongoDB replica set. Use MongoDB Atlas or another replica set. Stock was not changed.",
+      503,
+      "TRANSACTIONS_UNAVAILABLE",
+    );
+  }
+  return error;
+}
+
+export function duplicateKeyPattern(error: unknown): Record<string, number> | null {
+  const candidates: unknown[] = [error];
+  if (typeof error === "object" && error && "cause" in error) {
+    candidates.push((error as { cause?: unknown }).cause);
+  }
+
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "object" &&
+      candidate !== null &&
+      "code" in candidate &&
+      (candidate as { code?: number }).code === 11000
+    ) {
+      return (
+        (candidate as { keyPattern?: Record<string, number> }).keyPattern ?? {}
+      );
+    }
+  }
+
+  return null;
+}
+
+function isDuplicateDocumentNumber(error: unknown) {
+  const pattern = duplicateKeyPattern(error);
+  if (!pattern) return false;
+  return "adjustmentNumber" in pattern || "purchaseNumber" in pattern;
+}
+
+export function isIdempotencyConflict(error: unknown) {
+  const pattern = duplicateKeyPattern(error);
+  return Boolean(pattern && "idempotencyKey" in pattern);
+}
+
+export async function mutateProductStock(params: {
+  scope: StockScope;
   productId: string | Types.ObjectId;
   quantity: number;
   movementType: InventoryMovementType;
-  reason: string;
-  notes?: string;
-  referenceType: "STOCK_ADJUSTMENT" | "PURCHASE" | "PRODUCT" | "MANUAL";
-  referenceId?: Types.ObjectId | null;
-  performedBy?: Types.ObjectId | null;
   session: ClientSession;
-  /** When set, treat quantity as absolute stock (for CORRECTION semantics already computed). */
-  absoluteNewStock?: number;
-};
+}) {
+  const { scope, productId, quantity, movementType, session } = params;
 
-export async function applyStockChange(input: ApplyStockChangeInput) {
-  const {
-    productId,
-    quantity,
-    movementType,
-    reason,
-    notes = "",
-    referenceType,
-    referenceId = null,
-    performedBy = null,
-    session,
-    absoluteNewStock,
-  } = input;
+  const product = await Product.findOne({
+    _id: productId,
+    businessId: scope.businessId,
+  }).session(session);
 
-  const product = await Product.findById(productId).session(session);
   if (!product) {
-    throw new InventoryError("Product not found.", 404);
+    throw new InventoryError("Product not found.", 404, "PRODUCT_NOT_FOUND");
   }
+
   if (!product.isActive && movementType === "PURCHASE_RECEIVE") {
     throw new InventoryError(
       `Product "${product.name}" is inactive and cannot receive purchase stock.`,
       409,
+      "PRODUCT_INACTIVE",
     );
   }
 
-  const previousStock = product.currentStock;
-  let newStock: number;
-  let loggedQuantity: number;
+  const math = computeNextStock({
+    previousStock: product.currentStock,
+    quantity,
+    movementType,
+  });
 
-  if (absoluteNewStock !== undefined) {
-    newStock = absoluteNewStock;
-    loggedQuantity = Math.abs(newStock - previousStock);
-  } else if (isStockIncreasing(movementType)) {
-    newStock = previousStock + quantity;
-    loggedQuantity = quantity;
-  } else if (movementType === "CORRECTION") {
-    newStock = quantity;
-    loggedQuantity = Math.abs(newStock - previousStock);
-  } else {
-    newStock = previousStock - quantity;
-    loggedQuantity = quantity;
-  }
+  const delta =
+    movementType === "CORRECTION"
+      ? math.newStock - math.previousStock
+      : isStockIncreasing(movementType)
+        ? quantity
+        : -quantity;
 
-  if (newStock < 0) {
+  const updated = await Product.findOneAndUpdate(
+    {
+      _id: product._id,
+      businessId: scope.businessId,
+      currentStock: math.previousStock,
+    },
+    { $inc: { currentStock: delta } },
+    { session, returnDocument: "after" },
+  );
+
+  if (!updated) {
     throw new InventoryError(
-      `Insufficient stock for "${product.name}". Available: ${previousStock}, requested: ${quantity}.`,
+      "Stock was updated by another operation. Please retry.",
       409,
+      "STOCK_CONFLICT",
     );
   }
 
-  product.currentStock = newStock;
-  await product.save({ session });
+  if (updated.currentStock < 0) {
+    throw new InventoryError(
+      `Insufficient stock for "${product.name}".`,
+      409,
+      "INSUFFICIENT_STOCK",
+    );
+  }
 
+  if (movementType === "CORRECTION" && math.loggedQuantity === 0) {
+    throw new InventoryError("Stock is already at that level.");
+  }
+
+  return {
+    product: updated,
+    previousStock: math.previousStock,
+    newStock: updated.currentStock,
+    loggedQuantity: Math.abs(updated.currentStock - math.previousStock),
+  };
+}
+
+export async function writeInventoryLog(params: {
+  scope: StockScope;
+  productId: Types.ObjectId;
+  movementType: InventoryMovementType;
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  notes?: string;
+  referenceType: InventoryReferenceType;
+  referenceId?: Types.ObjectId | null;
+  referenceNumber?: string;
+  session: ClientSession;
+}) {
   const [log] = await InventoryLog.create(
     [
       {
-        product: product._id,
-        movementType,
-        quantity: loggedQuantity,
-        previousStock,
-        newStock,
-        reason,
-        referenceType,
-        referenceId,
-        notes,
-        performedBy,
+        businessId: params.scope.businessId,
+        storeId: params.scope.storeId,
+        product: params.productId,
+        movementType: params.movementType,
+        quantity: params.quantity,
+        previousStock: params.previousStock,
+        newStock: params.newStock,
+        reason: params.reason.trim(),
+        referenceType: params.referenceType,
+        referenceId: params.referenceId ?? null,
+        referenceNumber: (params.referenceNumber ?? "").trim(),
+        notes: (params.notes ?? "").trim(),
+        performedBy: params.scope.performedBy ?? null,
       },
     ],
-    { session },
+    { session: params.session },
   );
 
-  return { product, log, previousStock, newStock, loggedQuantity };
+  return log;
+}
+
+async function nextAdjustmentNumber(
+  businessId: Types.ObjectId,
+  session: ClientSession,
+) {
+  return nextDailySequence(
+    async (prefix) =>
+      StockAdjustment.countDocuments({
+        businessId,
+        adjustmentNumber: { $regex: `^${prefix}` },
+      }).session(session),
+    "ADJ",
+  );
+}
+
+export async function findIdempotentAdjustment(
+  businessId: Types.ObjectId,
+  idempotencyKey: string,
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const existing = await StockAdjustment.findOne({
+      businessId,
+      idempotencyKey,
+    });
+    if (existing) return existing;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+  return null;
 }
 
 export async function createStockAdjustment(params: {
+  scope: StockScope;
   productId: string;
   adjustmentType: StockAdjustmentType;
   quantity: number;
   reason: string;
   notes?: string;
   referenceNumber?: string;
-  createdBy?: string | null;
+  idempotencyKey?: string | null;
 }) {
   const {
+    scope,
     productId,
     adjustmentType,
     quantity,
     reason,
     notes = "",
     referenceNumber = "",
-    createdBy = null,
+    idempotencyKey,
   } = params;
 
   if (!reason.trim()) {
     throw new InventoryError("A reason is required for stock adjustments.");
   }
 
-  return withMongoTransaction(async (session) => {
-    const product = await Product.findById(productId).session(session);
-    if (!product) {
-      throw new InventoryError("Product not found.", 404);
-    }
+  const key = idempotencyKey?.trim() || "";
+  if (key) {
+    const existing = await StockAdjustment.findOne({
+      businessId: scope.businessId,
+      idempotencyKey: key,
+    });
+    if (existing) return { adjustment: existing, replayed: true };
+  }
 
-    const result = computeNextStock({
-      previousStock: product.currentStock,
-      quantity,
-      adjustmentType,
+  try {
+    const adjustment = await withMongoTransaction(async (session) => {
+      if (key) {
+        const existing = await StockAdjustment.findOne({
+          businessId: scope.businessId,
+          idempotencyKey: key,
+        }).session(session);
+        if (existing) return existing;
+      }
+
+      const mutated = await mutateProductStock({
+        scope,
+        productId,
+        quantity,
+        movementType: adjustmentType,
+        session,
+      });
+
+      const adjustmentNumber = await nextAdjustmentNumber(
+        scope.businessId,
+        session,
+      );
+
+      const [created] = await StockAdjustment.create(
+        [
+          {
+            businessId: scope.businessId,
+            storeId: scope.storeId,
+            adjustmentNumber,
+            idempotencyKey: key || undefined,
+            product: mutated.product._id,
+            adjustmentType,
+            quantity,
+            previousStock: mutated.previousStock,
+            newStock: mutated.newStock,
+            reason: reason.trim(),
+            notes: notes.trim(),
+            referenceNumber: referenceNumber.trim(),
+            status: "COMPLETED",
+            createdBy: scope.performedBy ?? null,
+          },
+        ],
+        { session },
+      );
+
+      await writeInventoryLog({
+        scope,
+        productId: mutated.product._id,
+        movementType: adjustmentType,
+        quantity: mutated.loggedQuantity,
+        previousStock: mutated.previousStock,
+        newStock: mutated.newStock,
+        reason: reason.trim(),
+        notes: notes.trim(),
+        referenceType: "STOCK_ADJUSTMENT",
+        referenceId: created._id,
+        referenceNumber: referenceNumber.trim() || adjustmentNumber,
+        session,
+      });
+
+      return created;
     });
 
-    const adjustmentNumber = await nextDailySequence(
-      async (prefix) =>
-        StockAdjustment.countDocuments({
-          adjustmentNumber: { $regex: `^${prefix}` },
-        }).session(session),
-      "ADJ",
-    );
-
-    const createdById = createdBy ? new Types.ObjectId(createdBy) : null;
-
-    const [adjustment] = await StockAdjustment.create(
-      [
-        {
-          adjustmentNumber,
-          product: product._id,
-          adjustmentType,
-          quantity,
-          previousStock: result.previousStock,
-          newStock: result.newStock,
-          reason: reason.trim(),
-          notes: notes.trim(),
-          referenceNumber: referenceNumber.trim(),
-          status: "COMPLETED",
-          createdBy: createdById,
-        },
-      ],
-      { session },
-    );
-
-    product.currentStock = result.newStock;
-    await product.save({ session });
-
-    await InventoryLog.create(
-      [
-        {
-          product: product._id,
-          movementType: result.movementType,
-          quantity: result.loggedQuantity,
-          previousStock: result.previousStock,
-          newStock: result.newStock,
-          reason: reason.trim(),
-          referenceType: "STOCK_ADJUSTMENT",
-          referenceId: adjustment._id,
-          notes: notes.trim(),
-          performedBy: createdById,
-        },
-      ],
-      { session },
-    );
-
-    return adjustment;
-  });
+    return { adjustment, replayed: false };
+  } catch (error) {
+    if (key && isIdempotencyConflict(error)) {
+      const existing = await findIdempotentAdjustment(scope.businessId, key);
+      if (existing) return { adjustment: existing, replayed: true };
+    }
+    throw error;
+  }
 }
 
 export async function createProductWithOpeningStock(params: {
   productData: Record<string, unknown>;
   openingStock: number;
-  createdBy?: string | null;
+  scope: StockScope;
 }) {
-  const { productData, openingStock, createdBy = null } = params;
+  const { productData, openingStock, scope } = params;
 
   return withMongoTransaction(async (session) => {
     const [product] = await Product.create(
       [
         {
           ...productData,
+          businessId: scope.businessId,
+          storeId: scope.storeId,
           currentStock: 0,
         },
       ],
@@ -283,54 +440,54 @@ export async function createProductWithOpeningStock(params: {
     );
 
     if (openingStock > 0) {
-      const createdById = createdBy ? new Types.ObjectId(createdBy) : null;
-      const adjustmentNumber = await nextDailySequence(
-        async (prefix) =>
-          StockAdjustment.countDocuments({
-            adjustmentNumber: { $regex: `^${prefix}` },
-          }).session(session),
-        "ADJ",
+      const mutated = await mutateProductStock({
+        scope,
+        productId: product._id,
+        quantity: openingStock,
+        movementType: "OPENING_STOCK",
+        session,
+      });
+
+      const adjustmentNumber = await nextAdjustmentNumber(
+        scope.businessId,
+        session,
       );
 
       const [adjustment] = await StockAdjustment.create(
         [
           {
+            businessId: scope.businessId,
+            storeId: scope.storeId,
             adjustmentNumber,
             product: product._id,
             adjustmentType: "OPENING_STOCK",
             quantity: openingStock,
-            previousStock: 0,
-            newStock: openingStock,
+            previousStock: mutated.previousStock,
+            newStock: mutated.newStock,
             reason: "Opening stock on product creation",
             notes: "",
             referenceNumber: "",
             status: "COMPLETED",
-            createdBy: createdById,
+            createdBy: scope.performedBy ?? null,
           },
         ],
         { session },
       );
 
-      product.currentStock = openingStock;
-      await product.save({ session });
-
-      await InventoryLog.create(
-        [
-          {
-            product: product._id,
-            movementType: "OPENING_STOCK",
-            quantity: openingStock,
-            previousStock: 0,
-            newStock: openingStock,
-            reason: "Opening stock on product creation",
-            referenceType: "PRODUCT",
-            referenceId: product._id,
-            notes: `Linked adjustment ${adjustment.adjustmentNumber}`,
-            performedBy: createdById,
-          },
-        ],
-        { session },
-      );
+      await writeInventoryLog({
+        scope,
+        productId: product._id,
+        movementType: "OPENING_STOCK",
+        quantity: mutated.loggedQuantity,
+        previousStock: mutated.previousStock,
+        newStock: mutated.newStock,
+        reason: "Opening stock on product creation",
+        notes: `Linked adjustment ${adjustment.adjustmentNumber}`,
+        referenceType: "STOCK_ADJUSTMENT",
+        referenceId: adjustment._id,
+        referenceNumber: adjustment.adjustmentNumber,
+        session,
+      });
     }
 
     return product;

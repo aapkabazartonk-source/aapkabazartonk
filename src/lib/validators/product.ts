@@ -49,6 +49,16 @@ const productBaseSchema = z.object({
     .number()
     .min(0, "Minimum stock level cannot be negative"),
   unit: z.enum(PRODUCT_UNITS),
+  hsn: z
+    .string()
+    .trim()
+    .max(16, "HSN/SAC cannot exceed 16 characters")
+    .optional(),
+  gstRate: z.coerce
+    .number()
+    .min(0, "GST rate cannot be negative")
+    .max(100, "GST rate cannot exceed 100")
+    .optional(),
   images: z.array(optionalUrl).max(8, "You can add up to 8 images"),
   isActive: z.boolean(),
 });

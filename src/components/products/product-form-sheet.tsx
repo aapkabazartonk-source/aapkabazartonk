@@ -71,6 +71,8 @@ export function ProductFormSheet({
       currentStock: 0,
       minStockLevel: 5,
       unit: "piece",
+      hsn: "",
+      gstRate: 0,
       images: [""],
       isActive: true,
     },
@@ -113,6 +115,8 @@ export function ProductFormSheet({
       currentStock: initialData?.currentStock ?? 0,
       minStockLevel: initialData?.minStockLevel ?? 5,
       unit: (initialData?.unit as ProductFormValues["unit"]) ?? "piece",
+      hsn: initialData?.hsn ?? "",
+      gstRate: initialData?.gstRate ?? 0,
       images:
         initialData?.images && initialData.images.length > 0
           ? initialData.images
@@ -312,6 +316,41 @@ export function ProductFormSheet({
               {form.formState.errors.sellingPrice ? (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.sellingPrice.message}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="product-hsn">HSN / SAC</Label>
+              <Input
+                id="product-hsn"
+                placeholder="Optional"
+                {...form.register("hsn")}
+              />
+              {form.formState.errors.hsn ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.hsn.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="product-gst">GST rate %</Label>
+              <Input
+                id="product-gst"
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                {...form.register("gstRate")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Used only when the business is GST registered. Leave 0 for exempt items.
+              </p>
+              {form.formState.errors.gstRate ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.gstRate.message}
                 </p>
               ) : null}
             </div>

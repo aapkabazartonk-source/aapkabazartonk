@@ -78,3 +78,56 @@ export const STOCK_STATUS_FILTERS = [
 ] as const;
 
 export type StockStatusFilter = (typeof STOCK_STATUS_FILTERS)[number];
+
+export const PAYMENT_METHODS = [
+  "CASH",
+  "UPI",
+  "CARD",
+  "BANK_TRANSFER",
+  "CREDIT",
+] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Methods a cashier can tender. Credit is calculated from the unpaid balance. */
+export const TENDER_METHODS = [
+  "CASH",
+  "UPI",
+  "CARD",
+  "BANK_TRANSFER",
+] as const;
+
+export type TenderMethod = (typeof TENDER_METHODS)[number];
+
+export const PAYMENT_RECORD_STATUSES = [
+  "CONFIRMED",
+  "MANUALLY_CONFIRMED",
+  "CREDIT",
+] as const;
+
+export type PaymentRecordStatus = (typeof PAYMENT_RECORD_STATUSES)[number];
+
+/** No gateway verification exists. UPI and transfers stay manual. */
+export const PAYMENT_VERIFICATIONS = ["NOT_APPLICABLE", "MANUAL"] as const;
+
+export type PaymentVerification = (typeof PAYMENT_VERIFICATIONS)[number];
+
+export const SALE_PAYMENT_STATUSES = ["PAID", "PARTIAL", "UNPAID"] as const;
+
+export type SalePaymentStatus = (typeof SALE_PAYMENT_STATUSES)[number];
+
+export const SALE_STATUSES = ["COMPLETED"] as const;
+
+export type SaleStatus = (typeof SALE_STATUSES)[number];
+
+export const INVOICE_TYPES = ["TAX_INVOICE", "BILL_OF_SUPPLY"] as const;
+
+export type InvoiceType = (typeof INVOICE_TYPES)[number];
+
+export const SUPPLY_TYPES = ["INTRA", "INTER"] as const;
+
+export type SupplyType = (typeof SUPPLY_TYPES)[number];
+
+export const HELD_CART_STATUSES = ["HELD", "RESUMED", "DISCARDED"] as const;
+
+export type HeldCartStatus = (typeof HELD_CART_STATUSES)[number];

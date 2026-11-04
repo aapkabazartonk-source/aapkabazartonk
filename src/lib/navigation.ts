@@ -59,10 +59,10 @@ export const DASHBOARD_NAV: NavItem[] = [
     description: "Point of sale and billing",
   },
   {
-    title: "Sales & Orders",
+    title: "Sales",
     href: "/dashboard/sales",
     icon: ShoppingCart,
-    description: "View and manage sales orders",
+    description: "Sales history and invoices",
   },
   {
     title: "Customers",

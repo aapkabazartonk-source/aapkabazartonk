@@ -196,6 +196,8 @@ export async function POST(request: Request) {
       sellingPrice: parsed.sellingPrice,
       minStockLevel: parsed.minStockLevel ?? 5,
       unit: parsed.unit,
+      hsn: (parsed.hsn ?? "").trim().toUpperCase(),
+      gstRate: parsed.gstRate ?? 0,
       images,
       isActive: parsed.isActive ?? true,
     };

@@ -143,6 +143,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       existing.minStockLevel = parsed.minStockLevel;
     }
     if (parsed.unit !== undefined) existing.unit = parsed.unit;
+    if (parsed.hsn !== undefined) existing.hsn = parsed.hsn.trim().toUpperCase();
+    if (parsed.gstRate !== undefined) existing.gstRate = parsed.gstRate;
     if (parsed.images !== undefined) {
       existing.images = parsed.images.filter((url) => url.trim().length > 0);
     }

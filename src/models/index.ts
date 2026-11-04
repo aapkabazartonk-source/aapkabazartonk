@@ -9,3 +9,6 @@ export { Order } from "./Order";
 export { InventoryLog } from "./InventoryLog";
 export { StockAdjustment } from "./StockAdjustment";
 export { Purchase } from "./Purchase";
+export { Sale } from "./Sale";
+export { Payment } from "./Payment";
+export { HeldCart } from "./HeldCart";

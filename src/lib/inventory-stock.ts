@@ -160,7 +160,12 @@ export function duplicateKeyPattern(error: unknown): Record<string, number> | nu
 function isDuplicateDocumentNumber(error: unknown) {
   const pattern = duplicateKeyPattern(error);
   if (!pattern) return false;
-  return "adjustmentNumber" in pattern || "purchaseNumber" in pattern;
+  return (
+    "adjustmentNumber" in pattern ||
+    "purchaseNumber" in pattern ||
+    "saleNumber" in pattern ||
+    "invoiceNumber" in pattern
+  );
 }
 
 export function isIdempotencyConflict(error: unknown) {

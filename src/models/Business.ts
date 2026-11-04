@@ -18,6 +18,15 @@ export interface IBusiness {
   legalName: string;
   gstin: string;
   isGstRegistered: boolean;
+  /** When true, product selling prices already include GST. */
+  pricesIncludeGst: boolean;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  stateCode: string;
+  pincode: string;
   /**
    * Suggested reorder target = minStockLevel * reorderMultiple.
    * See src/lib/reorder.ts.
@@ -60,6 +69,17 @@ const BusinessSchema = new Schema<IBusiness>(
       type: Boolean,
       default: false,
     },
+    pricesIncludeGst: {
+      type: Boolean,
+      default: false,
+    },
+    phone: { type: String, default: "", trim: true, maxlength: 20 },
+    email: { type: String, default: "", trim: true, lowercase: true, maxlength: 120 },
+    address: { type: String, default: "", trim: true, maxlength: 300 },
+    city: { type: String, default: "", trim: true, maxlength: 80 },
+    state: { type: String, default: "", trim: true, maxlength: 80 },
+    stateCode: { type: String, default: "", trim: true, maxlength: 2 },
+    pincode: { type: String, default: "", trim: true, maxlength: 10 },
     reorderMultiple: {
       type: Number,
       default: 2,

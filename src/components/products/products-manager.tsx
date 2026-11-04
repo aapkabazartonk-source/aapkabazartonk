@@ -189,9 +189,10 @@ export function ProductsManager() {
         });
         toast.success("Product created.");
       } else if (editing) {
+        const { currentStock: _currentStock, ...editable } = values;
         await fetchJson(`/api/products/${editing._id}`, {
           method: "PATCH",
-          body: JSON.stringify(values),
+          body: JSON.stringify(editable),
         });
         toast.success("Product updated.");
       }

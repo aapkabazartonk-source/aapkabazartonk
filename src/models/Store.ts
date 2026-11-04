@@ -16,6 +16,12 @@ export interface IStore {
   businessId: Types.ObjectId;
   name: string;
   code: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  stateCode: string;
+  pincode: string;
   isDefault: boolean;
   isActive: boolean;
   createdAt: Date;
@@ -43,6 +49,12 @@ const StoreSchema = new Schema<IStore>(
       uppercase: true,
       maxlength: 40,
     },
+    phone: { type: String, default: "", trim: true, maxlength: 20 },
+    address: { type: String, default: "", trim: true, maxlength: 300 },
+    city: { type: String, default: "", trim: true, maxlength: 80 },
+    state: { type: String, default: "", trim: true, maxlength: 80 },
+    stateCode: { type: String, default: "", trim: true, maxlength: 2 },
+    pincode: { type: String, default: "", trim: true, maxlength: 10 },
     isDefault: {
       type: Boolean,
       default: false,

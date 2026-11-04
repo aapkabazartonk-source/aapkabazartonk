@@ -27,6 +27,10 @@ export interface IProduct {
   currentStock: number;
   minStockLevel: number;
   unit: ProductUnit;
+  /** HSN/SAC captured on each sale so later edits do not change old invoices. */
+  hsn: string;
+  /** Product GST percentage. Billing reads this; it is never assumed. */
+  gstRate: number;
   images: string[];
   isActive: boolean;
   createdAt: Date;
@@ -107,6 +111,19 @@ const ProductSchema = new Schema<IProduct>(
       type: String,
       enum: PRODUCT_UNITS,
       default: "piece",
+    },
+    hsn: {
+      type: String,
+      default: "",
+      trim: true,
+      uppercase: true,
+      maxlength: 16,
+    },
+    gstRate: {
+      type: Number,
+      default: 0,
+      min: [0, "GST rate cannot be negative"],
+      max: [100, "GST rate cannot exceed 100"],
     },
     images: {
       type: [String],

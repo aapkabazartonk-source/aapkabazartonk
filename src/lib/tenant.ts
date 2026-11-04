@@ -7,8 +7,11 @@ import { Category } from "@/models/Category";
 import { Customer } from "@/models/Customer";
 import { InventoryLog } from "@/models/InventoryLog";
 import { Order } from "@/models/Order";
+import { Payment } from "@/models/Payment";
 import { Product } from "@/models/Product";
 import { Purchase } from "@/models/Purchase";
+import { Sale } from "@/models/Sale";
+import { HeldCart } from "@/models/HeldCart";
 import { StockAdjustment } from "@/models/StockAdjustment";
 import { Store } from "@/models/Store";
 import { Supplier } from "@/models/Supplier";
@@ -239,6 +242,10 @@ async function bootstrapTenant() {
     Purchase.syncIndexes(),
     StockAdjustment.syncIndexes(),
     InventoryLog.syncIndexes(),
+    Sale.syncIndexes(),
+    Payment.syncIndexes(),
+    HeldCart.syncIndexes(),
+    Customer.syncIndexes(),
   ]);
 }
 

@@ -33,6 +33,8 @@ export interface ProductRecord {
   currentStock: number;
   minStockLevel: number;
   unit: string;
+  hsn?: string;
+  gstRate?: number;
   images: string[];
   isActive: boolean;
   stockStatus?: StockStatus;

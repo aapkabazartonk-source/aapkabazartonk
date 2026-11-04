@@ -4,6 +4,7 @@ import { InventoryLog } from "@/models/InventoryLog";
 import { Order } from "@/models/Order";
 import { Product } from "@/models/Product";
 import { Purchase } from "@/models/Purchase";
+import { Sale } from "@/models/Sale";
 import { StockAdjustment } from "@/models/StockAdjustment";
 
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
@@ -73,13 +74,15 @@ export async function assertValidCategoryRefs(
 }
 
 export async function productHasTransactionReferences(productId: string) {
-  const [orderRef, purchaseRef, logRef, adjustmentRef] = await Promise.all([
-    Order.exists({ "items.product": productId }),
-    Purchase.exists({ "items.product": productId }),
-    InventoryLog.exists({ product: productId }),
-    StockAdjustment.exists({ product: productId }),
-  ]);
-  return Boolean(orderRef || purchaseRef || logRef || adjustmentRef);
+  const [orderRef, purchaseRef, saleRef, logRef, adjustmentRef] =
+    await Promise.all([
+      Order.exists({ "items.product": productId }),
+      Purchase.exists({ "items.product": productId }),
+      Sale.exists({ "items.product": productId }),
+      InventoryLog.exists({ product: productId }),
+      StockAdjustment.exists({ product: productId }),
+    ]);
+  return Boolean(orderRef || purchaseRef || saleRef || logRef || adjustmentRef);
 }
 
 export async function assertUniqueSku(

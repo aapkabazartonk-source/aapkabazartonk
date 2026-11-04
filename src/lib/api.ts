@@ -34,7 +34,8 @@ export function handleApiError(error: unknown) {
     error !== null &&
     "name" in error &&
     ((error as { name?: string }).name === "InventoryError" ||
-      (error as { name?: string }).name === "TenantError") &&
+      (error as { name?: string }).name === "TenantError" ||
+      (error as { name?: string }).name === "BillingError") &&
     "status" in error &&
     "message" in error
   ) {
@@ -57,6 +58,9 @@ export function handleApiError(error: unknown) {
       keys.find((key) => key !== "businessId" && key !== "storeId") ??
       keys[0] ??
       "field";
+    if (field === "idempotencyKey") {
+      return jsonError("This request was already processed.", 409);
+    }
     const labels: Record<string, string> = {
       sku: "SKU",
       barcode: "Barcode",
@@ -65,7 +69,8 @@ export function handleApiError(error: unknown) {
       name: "Name",
       adjustmentNumber: "Adjustment number",
       purchaseNumber: "Purchase number",
-      idempotencyKey: "This stock adjustment",
+      saleNumber: "Sale number",
+      invoiceNumber: "Invoice number",
     };
     return jsonError(
       `${labels[field] ?? field} already exists. Please use a unique value.`,

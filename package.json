@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:billing": "tsx --test tests/gst.test.ts tests/invoice-preview.test.tsx tests/billing.integration.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.1",
@@ -26,6 +27,7 @@
     "lucide-react": "^1.66.0",
     "mongoose": "^9.11.4",
     "next": "16.4.4",
+    "pdf-lib": "^1.17.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
@@ -42,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

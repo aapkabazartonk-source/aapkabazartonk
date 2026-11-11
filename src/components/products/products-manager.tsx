@@ -91,8 +91,14 @@ export function ProductsManager() {
     total: 0,
     totalPages: 1,
   });
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("search")?.trim() || "";
+  });
+  const [debouncedSearch, setDebouncedSearch] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("search")?.trim() || "";
+  });
   const [status, setStatus] = useState("all");
   const [stockStatus, setStockStatus] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");

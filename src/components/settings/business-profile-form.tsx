@@ -139,6 +139,11 @@ export function BusinessProfileForm() {
         method: "PATCH",
         body: JSON.stringify(form),
       });
+      window.dispatchEvent(
+        new CustomEvent("owner-name-updated", {
+          detail: form.ownerName.trim(),
+        }),
+      );
       toast.success("Business profile saved.");
     } catch (error) {
       toast.error(

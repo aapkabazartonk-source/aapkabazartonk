@@ -61,6 +61,8 @@ export interface PurchaseRecord {
   supplierName: string;
   supplierContact?: string;
   supplierInvoiceNumber?: string;
+  supplierGstin?: string;
+  supplier?: string | { _id: string; name?: string; phone?: string } | null;
   purchaseDate: string;
   expectedDeliveryDate?: string | null;
   items: Array<{
@@ -81,6 +83,9 @@ export interface PurchaseRecord {
   tax: number;
   total: number;
   status: PurchaseStatus;
+  amountPaid?: number;
+  balanceDue?: number;
+  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
   notes?: string;
   receivedAt?: string | null;
   createdAt: string;

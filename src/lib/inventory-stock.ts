@@ -4,6 +4,7 @@ import {
   type InventoryMovementType,
   type InventoryReferenceType,
   type StockAdjustmentType,
+  type UserRole,
 } from "@/lib/constants";
 import { nextDailySequence } from "@/lib/document-numbers";
 import { InventoryLog } from "@/models/InventoryLog";
@@ -40,17 +41,20 @@ export type StockScope = {
   businessId: Types.ObjectId;
   storeId: Types.ObjectId;
   performedBy?: Types.ObjectId | null;
+  role?: UserRole | null;
 };
 
 export function scopeFromTenant(tenant: {
   businessId: Types.ObjectId;
   storeId: Types.ObjectId;
   userId: string | null;
+  role?: UserRole | null;
 }): StockScope {
   return {
     businessId: tenant.businessId,
     storeId: tenant.storeId,
     performedBy: tenant.userId ? new Types.ObjectId(tenant.userId) : null,
+    role: tenant.role ?? "owner",
   };
 }
 

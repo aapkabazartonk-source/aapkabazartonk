@@ -28,8 +28,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={{ colorScheme: "light" }}
+      suppressHydrationWarning
     >
-      <body className="min-h-full bg-background font-sans text-foreground antialiased">
+      <body
+        className="min-h-full bg-background font-sans text-foreground antialiased"
+        suppressHydrationWarning
+      >
         {children}
         <Toaster />
       </body>

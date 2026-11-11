@@ -86,7 +86,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       <div className="relative mx-auto hidden w-full max-w-md flex-1 lg:block">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search products, orders, customers..."
+          placeholder="Search products, orders..."
           className="h-11 rounded-full border-border bg-background pl-10 shadow-none"
           aria-label="Global search"
         />

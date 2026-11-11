@@ -69,7 +69,7 @@ export function HeldBillsManager() {
               <div>
                 <p className="font-semibold">{bill.holdNumber}</p>
                 <p className="text-sm text-muted-foreground">
-                  {bill.customerName} · {bill.cartItems.length} lines ·{" "}
+                  Walk-in customer · {bill.cartItems.length} lines ·{" "}
                   {new Date(bill.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
                 </p>
                 <p className="mt-1 text-sm">
@@ -78,7 +78,7 @@ export function HeldBillsManager() {
                 {bill.notes ? <p className="text-xs text-muted-foreground">{bill.notes}</p> : null}
               </div>
               <div className="flex gap-2">
-                <Button asChild className="h-11 bg-[#128C7E] text-white hover:bg-[#075E54]">
+                <Button asChild className="h-11 bg-primary text-primary-foreground hover:bg-primary/90">
                   <Link href={`/dashboard/billing?held=${bill._id}`}>Resume</Link>
                 </Button>
                 <Button type="button" variant="outline" className="h-11" onClick={() => void discard(bill._id)}>

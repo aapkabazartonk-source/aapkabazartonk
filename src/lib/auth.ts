@@ -1,14 +1,42 @@
+import { cookies } from "next/headers";
+import {
+  SESSION_COOKIE_NAME,
+  decryptSession,
+  readCookieValue,
+} from "@/lib/session-crypto";
+
 /**
- * Auth is a UI shell in Phases 1–3. Login does not create a session.
- *
- * Do not read a user id or businessId from the client here.
- * When sign-in is implemented, return the session user id only.
- * Business membership is resolved in src/lib/tenant.ts from User.businessId.
+ * Single-owner session auth. Reads the sealed HttpOnly cookie only —
+ * never trusts client-supplied user or business ids.
  */
 export type AuthContext = {
   userId: string | null;
+  sessionVersion: number | null;
 };
 
-export async function getAuthContext(_request?: Request): Promise<AuthContext> {
-  return { userId: null };
+export async function getAuthContext(request?: Request): Promise<AuthContext> {
+  let token: string | undefined;
+
+  if (request) {
+    token = readCookieValue(
+      request.headers.get("cookie"),
+      SESSION_COOKIE_NAME,
+    );
+  } else {
+    try {
+      token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+    } catch {
+      token = undefined;
+    }
+  }
+
+  const session = await decryptSession(token);
+  if (!session?.userId) {
+    return { userId: null, sessionVersion: null };
+  }
+
+  return {
+    userId: session.userId,
+    sessionVersion: session.sessionVersion,
+  };
 }

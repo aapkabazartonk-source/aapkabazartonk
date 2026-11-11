@@ -95,7 +95,7 @@ export function SalesManager() {
         title="Sales"
         description="Completed bills, payment status, and invoice reprints."
         actions={
-          <Button asChild className="bg-[#128C7E] text-white hover:bg-[#075E54]">
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Link href="/dashboard/billing">New bill</Link>
           </Button>
         }
@@ -113,7 +113,7 @@ export function SalesManager() {
               setPage(1);
               setSearch(event.target.value);
             }}
-            placeholder="Invoice, customer, SKU"
+            placeholder="Invoice or SKU"
             className="h-11"
           />
           <Select

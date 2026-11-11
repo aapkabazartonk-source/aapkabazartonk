@@ -7,7 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:billing": "tsx --test tests/gst.test.ts tests/invoice-preview.test.tsx tests/billing.integration.test.ts"
+    "auth:bootstrap-owner": "tsx scripts/bootstrap-owner.ts",
+    "auth:reset-owner-password": "tsx scripts/reset-owner-password.ts",
+    "auth:sync-owner": "tsx scripts/sync-owner-from-env.ts",
+    "test:auth": "tsx --test tests/auth.test.ts",
+    "test:billing": "tsx --test tests/gst.test.ts tests/invoice-preview.test.tsx tests/billing.integration.test.ts",
+    "test:suppliers": "tsx --test tests/supplier-ledger.test.ts tests/supplier.integration.test.ts",
+    "test:settings": "tsx --test tests/settings.integration.test.ts tests/permissions.test.ts",
+    "test:analytics": "tsx --test tests/analytics.test.ts tests/analytics.integration.test.ts",
+    "test:dashboard": "tsx --test tests/dashboard.test.ts tests/dashboard.integration.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.1",
@@ -23,7 +31,9 @@
     "@radix-ui/react-slot": "^1.5.0",
     "@radix-ui/react-switch": "^1.4.1",
     "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.11.0",
     "clsx": "^2.1.1",
+    "jose": "^6.2.17",
     "lucide-react": "^1.66.0",
     "mongoose": "^9.11.4",
     "next": "16.4.4",
@@ -32,6 +42,7 @@
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
     "recharts": "^3.10.1",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.7"

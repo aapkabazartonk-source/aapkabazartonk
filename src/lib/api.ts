@@ -35,7 +35,11 @@ export function handleApiError(error: unknown) {
     "name" in error &&
     ((error as { name?: string }).name === "InventoryError" ||
       (error as { name?: string }).name === "TenantError" ||
-      (error as { name?: string }).name === "BillingError") &&
+      (error as { name?: string }).name === "BillingError" ||
+      (error as { name?: string }).name === "SupplierError" ||
+      (error as { name?: string }).name === "PermissionError" ||
+      (error as { name?: string }).name === "AnalyticsError" ||
+      (error as { name?: string }).name === "DashboardError") &&
     "status" in error &&
     "message" in error
   ) {
@@ -71,6 +75,8 @@ export function handleApiError(error: unknown) {
       purchaseNumber: "Purchase number",
       saleNumber: "Sale number",
       invoiceNumber: "Invoice number",
+      paymentNumber: "Payment number",
+      referenceId: "Ledger reference",
     };
     return jsonError(
       `${labels[field] ?? field} already exists. Please use a unique value.`,

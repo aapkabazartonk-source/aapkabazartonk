@@ -28,8 +28,13 @@ export const tenderSchema = z.object({
   referenceNumber: z.string().trim().max(80).optional().default(""),
 });
 
+const walkInOnly = z
+  .any()
+  .optional()
+  .transform(() => null as string | null);
+
 export const quoteSchema = z.object({
-  customerId: optionalObjectId,
+  customerId: walkInOnly,
   notes: z.string().trim().max(500).optional().default(""),
   billDiscount: z.coerce.number().min(0).default(0),
   allowCredit: z.boolean().optional().default(false),
@@ -44,7 +49,7 @@ export const checkoutSchema = quoteSchema.extend({
 });
 
 export const holdCartSchema = z.object({
-  customerId: optionalObjectId,
+  customerId: walkInOnly,
   notes: z.string().trim().max(500).optional().default(""),
   billDiscount: z.coerce.number().min(0).default(0),
   heldCartId: optionalObjectId,

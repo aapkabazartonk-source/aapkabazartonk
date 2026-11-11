@@ -29,7 +29,7 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
         <SheetHeader className="border-b border-sidebar-border px-4 py-5">
           <SheetTitle className="flex items-center gap-3 text-foreground">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <Store className="h-5 w-5 text-foreground" />
+              <Store className="h-5 w-5" />
             </div>
             <span>Aapka Bazar</span>
           </SheetTitle>

@@ -116,6 +116,46 @@ export const SALE_PAYMENT_STATUSES = ["PAID", "PARTIAL", "UNPAID"] as const;
 
 export type SalePaymentStatus = (typeof SALE_PAYMENT_STATUSES)[number];
 
+/** Purchase payable status mirrored from Sale payment statuses. */
+export const PURCHASE_PAYMENT_STATUSES = ["PAID", "PARTIAL", "UNPAID"] as const;
+
+export type PurchasePaymentStatus = (typeof PURCHASE_PAYMENT_STATUSES)[number];
+
+/** Methods allowed when paying a supplier (payable side). */
+export const SUPPLIER_PAYMENT_METHODS = [
+  "CASH",
+  "UPI",
+  "BANK_TRANSFER",
+  "CHEQUE",
+] as const;
+
+export type SupplierPaymentMethod = (typeof SUPPLIER_PAYMENT_METHODS)[number];
+
+/**
+ * Supplier ledger entry types.
+ * Sign convention: debit increases payable; credit decreases payable.
+ * Positive running balance = amount payable to supplier.
+ */
+export const SUPPLIER_LEDGER_ENTRY_TYPES = [
+  "OPENING",
+  "PURCHASE",
+  "PAYMENT",
+  "ADJUSTMENT",
+] as const;
+
+export type SupplierLedgerEntryType =
+  (typeof SUPPLIER_LEDGER_ENTRY_TYPES)[number];
+
+export const SUPPLIER_LEDGER_REFERENCE_TYPES = [
+  "SUPPLIER",
+  "PURCHASE",
+  "SUPPLIER_PAYMENT",
+  "ADJUSTMENT",
+] as const;
+
+export type SupplierLedgerReferenceType =
+  (typeof SUPPLIER_LEDGER_REFERENCE_TYPES)[number];
+
 export const SALE_STATUSES = ["COMPLETED"] as const;
 
 export type SaleStatus = (typeof SALE_STATUSES)[number];
@@ -131,3 +171,37 @@ export type SupplyType = (typeof SUPPLY_TYPES)[number];
 export const HELD_CART_STATUSES = ["HELD", "RESUMED", "DISCARDED"] as const;
 
 export type HeldCartStatus = (typeof HELD_CART_STATUSES)[number];
+
+/** Phase 6 roles. `viewer` is legacy and treated as cashier for permissions. */
+export const USER_ROLES = ["owner", "admin", "manager", "cashier", "viewer"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const SETTINGS_PERMISSIONS = [
+  "products.manage",
+  "inventory.adjust",
+  "purchases.manage",
+  "pos.bill",
+  "pos.discount_override",
+  "sales.cancel",
+  "reports.view",
+  "settings.manage",
+  "users.manage",
+] as const;
+
+export type SettingsPermission = (typeof SETTINGS_PERMISSIONS)[number];
+
+export const INVOICE_PAPER_SIZES = ["58mm", "80mm", "A4", "6x4"] as const;
+
+export type InvoicePaperSize = (typeof INVOICE_PAPER_SIZES)[number];
+
+export const BUSINESS_TYPES = [
+  "retail",
+  "wholesale",
+  "kirana",
+  "pharmacy",
+  "electronics",
+  "other",
+] as const;
+
+export type BusinessType = (typeof BUSINESS_TYPES)[number];

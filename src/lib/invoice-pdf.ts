@@ -66,6 +66,11 @@ export type InvoicePdfSource = {
   payments?: InvoicePayment[];
 };
 
+/** 6×4 cash memo: 4in × 6in in PDF points. */
+const PAGE_WIDTH = 4 * 72;
+const PAGE_HEIGHT = 6 * 72;
+const MARGIN = 18;
+
 function money(value: number) {
   const formatted = Math.abs(value).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -81,23 +86,28 @@ function methodLabel(method: string) {
   return method.charAt(0) + method.slice(1).toLowerCase();
 }
 
+function clip(text: string, max: number) {
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1))}…`;
+}
+
 export async function renderInvoicePdf(sale: InvoicePdfSource) {
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([595.28, 841.89]);
+  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const ink = rgb(0.15, 0.17, 0.15);
   const muted = rgb(0.4, 0.44, 0.4);
-  const line = rgb(0.85, 0.88, 0.84);
   const green = rgb(0.07, 0.37, 0.33);
 
   const snap = sale.invoiceSnapshot ?? {};
-  let y = 800;
+  const contentWidth = PAGE_WIDTH - MARGIN * 2;
+  let y = PAGE_HEIGHT - MARGIN;
 
   const draw = (
     text: string,
     x: number,
-    size = 10,
+    size = 8,
     weight: "regular" | "bold" = "regular",
     color = ink,
   ) => {
@@ -110,99 +120,118 @@ export async function renderInvoicePdf(sale: InvoicePdfSource) {
     });
   };
 
-  draw(snap.storeName || snap.businessName || "Store", 40, 16, "bold", green);
-  y -= 18;
+  const center = (text: string, size = 8, weight: "regular" | "bold" = "regular", color = ink) => {
+    const used = weight === "bold" ? bold : font;
+    const width = used.widthOfTextAtSize(text, size);
+    page.drawText(text, {
+      x: Math.max(MARGIN, (PAGE_WIDTH - width) / 2),
+      y,
+      size,
+      font: used,
+      color,
+    });
+  };
+
+  const store = clip(snap.storeName || snap.businessName || "Store", 36);
+  center(store, 11, "bold", green);
+  y -= 13;
   if (snap.legalName) {
-    draw(snap.legalName, 40, 10, "regular", muted);
-    y -= 14;
+    center(clip(snap.legalName, 42), 7, "regular", muted);
+    y -= 10;
   }
   if (snap.address) {
-    draw(snap.address.slice(0, 110), 40, 9, "regular", muted);
-    y -= 12;
+    center(clip(snap.address, 48), 7, "regular", muted);
+    y -= 10;
   }
   if (snap.phone) {
-    draw(snap.phone, 40, 9, "regular", muted);
-    y -= 12;
+    center(snap.phone, 7, "regular", muted);
+    y -= 10;
   }
   if (snap.isGstRegistered && snap.gstin) {
-    draw(`GSTIN ${snap.gstin}`, 40, 9, "bold");
-    y -= 14;
+    center(`GSTIN ${snap.gstin}`, 7, "bold");
+    y -= 11;
   }
 
   const title = sale.invoiceType === "TAX_INVOICE" ? "TAX INVOICE" : "BILL OF SUPPLY";
-  page.drawText(title, {
-    x: 400,
-    y: 800,
-    size: 14,
-    font: bold,
-    color: green,
-  });
-  page.drawText(sale.invoiceNumber, {
-    x: 400,
-    y: 782,
-    size: 10,
-    font: bold,
-    color: ink,
-  });
-  page.drawText(new Date(sale.createdAt).toLocaleString("en-IN"), {
-    x: 400,
-    y: 768,
-    size: 9,
-    font,
+  center(title, 8, "bold", green);
+  y -= 11;
+  center(sale.invoiceNumber, 9, "bold");
+  y -= 10;
+  center(new Date(sale.createdAt).toLocaleString("en-IN"), 7, "regular", muted);
+  y -= 12;
+
+  page.drawLine({
+    start: { x: MARGIN, y },
+    end: { x: PAGE_WIDTH - MARGIN, y },
+    thickness: 0.6,
     color: muted,
   });
+  y -= 12;
 
-  y -= 10;
-  page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 1, color: line });
-  y -= 22;
-  draw("Bill to", 40, 9, "bold", muted);
-  y -= 14;
-  draw(snap.customerName || "Walk-in customer", 40, 11, "bold");
-  y -= 14;
+  draw(snap.customerName || "Walk-in customer", MARGIN, 8, "bold");
+  y -= 11;
   if (snap.customerPhone) {
-    draw(snap.customerPhone, 40, 9, "regular", muted);
-    y -= 12;
-  }
-  if (snap.customerGstin) {
-    draw(`GSTIN ${snap.customerGstin}`, 40, 9);
-    y -= 12;
+    draw(snap.customerPhone, MARGIN, 7, "regular", muted);
+    y -= 10;
   }
   if (snap.placeOfSupply) {
-    draw(`Place of supply: ${snap.placeOfSupply}`, 40, 9, "regular", muted);
-    y -= 12;
+    draw(clip(`Place of supply: ${snap.placeOfSupply}`, 46), MARGIN, 7, "regular", muted);
+    y -= 10;
   }
   if (snap.pricesIncludeGst && snap.isGstRegistered) {
-    draw("Prices are GST inclusive", 40, 9, "regular", muted);
-    y -= 12;
+    draw("Prices include GST", MARGIN, 7, "regular", muted);
+    y -= 10;
   }
 
-  y -= 8;
-  page.drawRectangle({ x: 40, y: y - 6, width: 515, height: 20, color: rgb(0.91, 0.96, 0.93) });
-  const headers = ["Item", "HSN", "Qty", "Price", "Disc.", "Tax", "Amount"];
-  const cols = [44, 230, 280, 320, 390, 450, 510];
-  headers.forEach((header, index) => {
-    page.drawText(header, { x: cols[index], y: y, size: 8, font: bold, color: green });
+  y -= 2;
+  page.drawLine({
+    start: { x: MARGIN, y },
+    end: { x: PAGE_WIDTH - MARGIN, y },
+    thickness: 0.6,
+    color: muted,
   });
-  y -= 22;
+  y -= 12;
 
   for (const item of sale.items) {
-    if (y < 120) break;
-    const name = item.productName.length > 32 ? `${item.productName.slice(0, 31)}…` : item.productName;
-    page.drawText(name, { x: cols[0], y, size: 9, font, color: ink });
-    page.drawText((item.hsn || "—").slice(0, 8), { x: cols[1], y, size: 8, font, color: muted });
-    page.drawText(String(item.quantity), { x: cols[2], y, size: 9, font, color: ink });
-    page.drawText(money(item.unitPrice), { x: cols[3], y, size: 8, font, color: ink });
-    page.drawText(money(item.discount ?? 0), { x: cols[4], y, size: 8, font, color: ink });
-    page.drawText(`${item.taxRate ?? 0}%`, { x: cols[5], y, size: 8, font, color: ink });
-    page.drawText(money(item.finalAmount), { x: cols[6], y, size: 9, font: bold, color: ink });
-    y -= 16;
+    if (y < 70) break;
+    const name = clip(item.productName, 28);
+    const amount = money(item.finalAmount);
+    const amountWidth = bold.widthOfTextAtSize(amount, 8);
+    draw(name, MARGIN, 8, "bold");
+    page.drawText(amount, {
+      x: PAGE_WIDTH - MARGIN - amountWidth,
+      y,
+      size: 8,
+      font: bold,
+      color: ink,
+    });
+    y -= 10;
+    draw(
+      clip(
+        `${item.quantity} ${item.unit || ""} × ${money(item.unitPrice)}${item.hsn ? ` · HSN ${item.hsn}` : ""}${item.taxRate ? ` · GST ${item.taxRate}%` : ""}`,
+        52,
+      ),
+      MARGIN,
+      7,
+      "regular",
+      muted,
+    );
+    y -= 11;
+    if ((item.discount ?? 0) > 0) {
+      draw(`Discount ${money(item.discount ?? 0)}`, MARGIN, 7, "regular", muted);
+      y -= 10;
+    }
   }
 
-  y -= 8;
-  page.drawLine({ start: { x: 320, y }, end: { x: 555, y }, thickness: 1, color: line });
-  y -= 16;
+  page.drawLine({
+    start: { x: MARGIN, y },
+    end: { x: PAGE_WIDTH - MARGIN, y },
+    thickness: 0.6,
+    color: muted,
+  });
+  y -= 12;
 
-  const rows: [string, string][] = [
+  const rows: [string, string, boolean?][] = [
     ["Subtotal", money(sale.subtotal)],
     ["Item discount", money(sale.itemDiscount)],
     ["Bill discount", money(sale.billDiscount)],
@@ -212,58 +241,64 @@ export async function renderInvoicePdf(sale: InvoicePdfSource) {
   if (sale.sgst) rows.push(["SGST", money(sale.sgst)]);
   if (sale.igst) rows.push(["IGST", money(sale.igst)]);
   rows.push(["Total tax", money(sale.totalTax)]);
-  rows.push(["Grand total", money(sale.grandTotal)]);
+  rows.push(["Grand total", money(sale.grandTotal), true]);
   rows.push(["Amount received", money(sale.amountPaid)]);
   rows.push(["Balance due", money(sale.balanceDue)]);
   if (sale.changeGiven) rows.push(["Change returned", money(sale.changeGiven)]);
 
-  for (const [label, value] of rows) {
-    const strong = label === "Grand total";
+  for (const [label, value, strong] of rows) {
+    if (y < 40) break;
+    const size = strong ? 9 : 7;
+    const valueWidth = (strong ? bold : font).widthOfTextAtSize(value, size);
     page.drawText(label, {
-      x: 340,
+      x: MARGIN,
       y,
-      size: strong ? 11 : 9,
+      size,
       font: strong ? bold : font,
       color: ink,
     });
     page.drawText(value, {
-      x: 470,
+      x: PAGE_WIDTH - MARGIN - valueWidth,
       y,
-      size: strong ? 11 : 9,
+      size,
       font: bold,
       color: ink,
     });
-    y -= strong ? 18 : 14;
+    y -= strong ? 12 : 10;
   }
 
-  y -= 8;
-  page.drawText("Payments", { x: 40, y, size: 10, font: bold, color: green });
-  y -= 14;
-  const payments = sale.payments ?? [];
-  if (payments.length === 0) {
-    page.drawText("No payment recorded", { x: 40, y, size: 9, font, color: muted });
-    y -= 14;
-  }
-  for (const payment of payments) {
-    const manual =
-      payment.verification === "MANUAL" || payment.status === "MANUALLY_CONFIRMED"
-        ? " · manually confirmed"
-        : "";
-    const reference = payment.referenceNumber ? ` · ${payment.referenceNumber}` : "";
-    page.drawText(
-      `${methodLabel(payment.paymentMethod)} ${money(payment.amount)}${reference}${manual}`,
-      { x: 40, y, size: 9, font, color: ink },
-    );
-    y -= 13;
+  y -= 4;
+  if (y > 36) {
+    draw("Payments", MARGIN, 8, "bold", green);
+    y -= 10;
+    const payments = sale.payments ?? [];
+    if (payments.length === 0) {
+      draw("No payment recorded", MARGIN, 7, "regular", muted);
+      y -= 10;
+    }
+    for (const payment of payments) {
+      if (y < 28) break;
+      const manual =
+        payment.verification === "MANUAL" || payment.status === "MANUALLY_CONFIRMED"
+          ? " · manual"
+          : "";
+      const reference = payment.referenceNumber ? ` · ${payment.referenceNumber}` : "";
+      draw(
+        clip(`${methodLabel(payment.paymentMethod)} ${money(payment.amount)}${reference}${manual}`, 48),
+        MARGIN,
+        7,
+      );
+      y -= 10;
+    }
   }
 
-  y -= 16;
-  page.drawText("This invoice is a snapshot of the sale. Later product or tax changes do not alter it.", {
-    x: 40,
-    y: Math.max(y, 40),
-    size: 8,
+  page.drawText("6x4 invoice snapshot", {
+    x: MARGIN,
+    y: 16,
+    size: 6,
     font,
     color: muted,
+    maxWidth: contentWidth,
   });
 
   return pdf.save();

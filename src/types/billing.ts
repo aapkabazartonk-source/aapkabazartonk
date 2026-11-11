@@ -18,12 +18,14 @@ export interface PosProduct {
   unit: string;
   hsn?: string;
   gstRate?: number;
+  images?: string[];
   category?: { _id: string; name: string } | string | null;
 }
 
 export interface PosBusiness {
   name: string;
   legalName: string;
+  logoUrl?: string;
   gstin: string;
   isGstRegistered: boolean;
   pricesIncludeGst: boolean;
@@ -33,12 +35,31 @@ export interface PosBusiness {
   storeName: string;
 }
 
-export interface PosCustomer {
-  _id: string;
-  name: string;
-  phone?: string;
-  gstin?: string;
-  stateCode?: string;
+export interface PosBillingPreferences {
+  billing: {
+    defaultPaymentMethod: TenderMethod;
+    enabledPaymentMethods: TenderMethod[];
+    enableBillDiscount: boolean;
+    maxBillDiscountPercent: number;
+    maxBillDiscountAmount: number;
+    showStockAvailability: boolean;
+    allowCreditSales: boolean;
+    autoPrintAfterBilling: boolean;
+    keyboardShortcutsEnabled: boolean;
+    requireCheckoutConfirmation: boolean;
+  };
+  printer: {
+    autoPrintAfterBilling: boolean;
+    paperSize: string;
+    printPreview: boolean;
+    printLogo: boolean;
+    defaultPrinterLabel: string;
+    notes: string;
+  };
+  invoice: {
+    paperSize: string;
+    thankYouMessage: string;
+  };
 }
 
 export interface QuoteLine {
@@ -117,6 +138,14 @@ export interface InvoiceSnapshot {
   customerStateName: string;
   supplyType: SupplyType;
   placeOfSupply: string;
+  logoUrl?: string;
+  footerNote?: string;
+  termsAndConditions?: string;
+  thankYouMessage?: string;
+  paperSize?: string;
+  showGstin?: boolean;
+  showLogo?: boolean;
+  showAddress?: boolean;
 }
 
 export interface SaleItemRecord {

@@ -49,7 +49,7 @@ export function draftsToPayments(drafts: TenderDraft[]) {
   });
 }
 
-const METHODS: { value: TenderMethod; label: string }[] = [
+const ALL_METHODS: { value: TenderMethod; label: string }[] = [
   { value: "CASH", label: "Cash" },
   { value: "UPI", label: "UPI" },
   { value: "CARD", label: "Card" },
@@ -68,6 +68,8 @@ export function CheckoutDialog({
   onAllowCreditChange,
   submitting,
   onConfirm,
+  enabledPaymentMethods,
+  allowCreditSales = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -80,7 +82,15 @@ export function CheckoutDialog({
   onAllowCreditChange: (value: boolean) => void;
   submitting: boolean;
   onConfirm: () => void;
+  enabledPaymentMethods?: TenderMethod[];
+  allowCreditSales?: boolean;
 }) {
+  const METHODS = ALL_METHODS.filter((method) =>
+    (enabledPaymentMethods?.length
+      ? enabledPaymentMethods
+      : ALL_METHODS.map((row) => row.value)
+    ).includes(method.value),
+  );
   const settlement = quote?.settlement;
   const grand = quote?.totals.grandTotal ?? 0;
 
@@ -111,11 +121,11 @@ export function CheckoutDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-2xl bg-[#E7F8EF] px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-[#075E54]">Total payable</p>
-          <p className="text-2xl font-semibold text-[#075E54]">{formatCurrency(grand)}</p>
+        <div className="rounded-2xl bg-purple-soft px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-purple">Total payable</p>
+          <p className="text-2xl font-semibold text-foreground">{formatCurrency(grand)}</p>
           {quote?.invoiceType ? (
-            <p className="text-xs text-[#075E54]">
+            <p className="text-xs text-muted-foreground">
               {quote.invoiceType === "TAX_INVOICE" ? "Tax invoice" : "Bill of supply"}
               {quote.supplyType === "INTER" ? " · IGST" : quote.totals.totalTax > 0 ? " · CGST + SGST" : ""}
             </p>
@@ -208,13 +218,17 @@ export function CheckoutDialog({
           </Button>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border px-3 py-3">
-          <div>
-            <p className="text-sm font-medium">Put the balance on udhaar</p>
-            <p className="text-xs text-muted-foreground">Partial payment and credit stay on the bill.</p>
+        {allowCreditSales ? (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-border px-3 py-3">
+            <div>
+              <p className="text-sm font-medium">Put the balance on udhaar</p>
+              <p className="text-xs text-muted-foreground">
+                Partial payment and credit stay on the bill.
+              </p>
+            </div>
+            <Switch checked={allowCredit} onCheckedChange={onAllowCreditChange} />
           </div>
-          <Switch checked={allowCredit} onCheckedChange={onAllowCreditChange} />
-        </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2 text-sm">
           <Summary label="Amount received" value={formatCurrency(settlement?.amountPaid ?? 0)} />
@@ -242,7 +256,7 @@ export function CheckoutDialog({
           </Button>
           <Button
             type="button"
-            className="h-11 bg-[#128C7E] text-white hover:bg-[#075E54]"
+            className="h-11 bg-primary text-primary-foreground hover:bg-primary/90"
             disabled={submitting || quoting || Boolean(quoteError) || !quote}
             onClick={onConfirm}
           >

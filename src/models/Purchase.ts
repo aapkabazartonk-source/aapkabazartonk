@@ -6,7 +6,12 @@ import {
   type Model,
   type Types,
 } from "mongoose";
-import { PURCHASE_STATUSES, type PurchaseStatus } from "@/lib/constants";
+import {
+  PURCHASE_PAYMENT_STATUSES,
+  PURCHASE_STATUSES,
+  type PurchasePaymentStatus,
+  type PurchaseStatus,
+} from "@/lib/constants";
 
 export interface IPurchaseItem {
   product: Types.ObjectId;
@@ -31,9 +36,11 @@ export interface IPurchase {
   supplierName: string;
   supplierContact: string;
   supplierInvoiceNumber: string;
+  /** Historical GSTIN snapshot at purchase time (immutable after receive). */
+  supplierGstin: string;
   /**
-   * Optional link to the existing Supplier directory.
-   * Phase 6 can require this without a second supplier model.
+   * Optional link to the Supplier directory (API field: supplierId).
+   * Legacy free-text purchases may omit this; payables only update when set.
    */
   supplier?: Types.ObjectId | null;
   purchaseDate: Date;
@@ -44,6 +51,13 @@ export interface IPurchase {
   tax: number;
   total: number;
   status: PurchaseStatus;
+  /**
+   * Payable mirrors reconciled against SupplierPayment.allocatedPurchases.
+   * amountPaid + balanceDue should equal total for RECEIVED purchases.
+   */
+  amountPaid: number;
+  balanceDue: number;
+  paymentStatus: PurchasePaymentStatus;
   notes: string;
   createdBy?: Types.ObjectId | null;
   receivedAt?: Date | null;
@@ -153,6 +167,13 @@ const PurchaseSchema = new Schema<IPurchase>(
       trim: true,
       maxlength: [100, "Supplier invoice number cannot exceed 100 characters"],
     },
+    supplierGstin: {
+      type: String,
+      default: "",
+      trim: true,
+      uppercase: true,
+      maxlength: [15, "GSTIN cannot exceed 15 characters"],
+    },
     supplier: {
       type: Schema.Types.ObjectId,
       ref: "Supplier",
@@ -204,6 +225,24 @@ const PurchaseSchema = new Schema<IPurchase>(
       default: "DRAFT",
       index: true,
     },
+    amountPaid: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    balanceDue: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: PURCHASE_PAYMENT_STATUSES,
+      default: "UNPAID",
+      index: true,
+    },
     notes: {
       type: String,
       default: "",
@@ -227,6 +266,9 @@ PurchaseSchema.index({ businessId: 1, purchaseNumber: 1 }, { unique: true });
 PurchaseSchema.index({ businessId: 1, createdAt: -1 });
 PurchaseSchema.index({ businessId: 1, status: 1, purchaseDate: -1 });
 PurchaseSchema.index({ businessId: 1, supplierName: 1 });
+PurchaseSchema.index({ businessId: 1, supplier: 1, status: 1, purchaseDate: -1 });
+PurchaseSchema.index({ businessId: 1, paymentStatus: 1, status: 1 });
+PurchaseSchema.index({ businessId: 1, storeId: 1, status: 1, receivedAt: -1 });
 
 export type PurchaseDocument = InferSchemaType<typeof PurchaseSchema> & {
   _id: Types.ObjectId;

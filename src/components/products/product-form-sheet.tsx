@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { PRODUCT_UNITS } from "@/lib/constants";
+import { ApiClientError } from "@/lib/fetch-json";
 import { generateSku } from "@/lib/slug";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -31,6 +33,45 @@ import {
   type ProductFormValues,
 } from "@/lib/validators/product";
 import type { CategoryRecord, ProductRecord } from "@/types/catalog";
+
+async function uploadProductImage(file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const response = await fetch("/api/uploads/product-image", {
+    method: "POST",
+    body,
+  });
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      typeof (payload as { error: unknown }).error === "string"
+        ? (payload as { error: string }).error
+        : `Upload failed with status ${response.status}`;
+    throw new ApiClientError(message, response.status);
+  }
+
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("url" in payload) ||
+    typeof (payload as { url: unknown }).url !== "string"
+  ) {
+    throw new ApiClientError("Upload response was invalid.", 500);
+  }
+
+  return (payload as { url: string }).url;
+}
 
 interface ProductFormSheetProps {
   open: boolean;
@@ -82,6 +123,8 @@ export function ProductFormSheet({
   const imageValues = form.watch("images") ?? [""];
   const purchasePrice = Number(form.watch("purchasePrice") || 0);
   const sellingPrice = Number(form.watch("sellingPrice") || 0);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const fileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const parentCategories = useMemo(
     () => categories.filter((category) => !category.parentCategory),
@@ -429,7 +472,7 @@ export function ProductFormSheet({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Image URLs</Label>
+              <Label>Product images</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -439,37 +482,125 @@ export function ProductFormSheet({
                     shouldValidate: true,
                   })
                 }
-                disabled={imageValues.length >= 8}
+                disabled={imageValues.length >= 8 || uploadingIndex !== null}
               >
                 <Plus className="h-4 w-4" />
                 Add image
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Upload JPEG, PNG, WebP, or GIF up to 5 MB. Max 8 images.
+            </p>
             <div className="space-y-2">
-              {imageValues.map((_, index) => (
-                <div key={`image-${index}`} className="flex gap-2">
-                  <Input
-                    placeholder="https://…"
-                    {...form.register(`images.${index}` as const)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={imageValues.length <= 1}
-                    onClick={() =>
-                      form.setValue(
-                        "images",
-                        imageValues.filter((_, i) => i !== index),
-                        { shouldValidate: true },
-                      )
-                    }
+              {imageValues.map((url, index) => {
+                const isUploading = uploadingIndex === index;
+                return (
+                  <div
+                    key={`image-${index}`}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-2"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
+                      {url ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- Cloudinary delivery URLs are arbitrary hosts.
+                        <img
+                          src={url}
+                          alt={`Product image ${index + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      {isUploading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+                          <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <input
+                        ref={(node) => {
+                          fileInputRefs.current[index] = node;
+                        }}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="sr-only"
+                        disabled={isUploading || submitting}
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (!file) return;
+
+                          setUploadingIndex(index);
+                          try {
+                            const uploadedUrl = await uploadProductImage(file);
+                            const next = [...imageValues];
+                            next[index] = uploadedUrl;
+                            form.setValue("images", next, {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            });
+                          } catch (error) {
+                            toast.error(
+                              error instanceof ApiClientError
+                                ? error.message
+                                : "Could not upload image.",
+                            );
+                          } finally {
+                            setUploadingIndex(null);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploading || submitting}
+                        onClick={() => fileInputRefs.current[index]?.click()}
+                      >
+                        {url ? "Replace image" : "Choose image"}
+                      </Button>
+                      {url ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          Uploaded
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={
+                        isUploading ||
+                        submitting ||
+                        (imageValues.length <= 1 && !url)
+                      }
+                      onClick={() => {
+                        if (imageValues.length <= 1) {
+                          form.setValue("images", [""], {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                          });
+                          return;
+                        }
+                        form.setValue(
+                          "images",
+                          imageValues.filter((_, i) => i !== index),
+                          { shouldValidate: true, shouldDirty: true },
+                        );
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
+            {form.formState.errors.images ? (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.images.message ??
+                  form.formState.errors.images.root?.message}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-muted/40 px-4 py-3">
@@ -496,12 +627,16 @@ export function ProductFormSheet({
               type="button"
               variant="outline"
               className="flex-1"
-              disabled={submitting}
+              disabled={submitting || uploadingIndex !== null}
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" disabled={submitting}>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={submitting || uploadingIndex !== null}
+            >
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />

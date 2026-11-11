@@ -219,7 +219,7 @@ export function InventoryOverview() {
               <Link href="/dashboard/inventory/alerts">View all</Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-0">
             {(data?.lowStockAlerts ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">No low stock items.</p>
             ) : (
@@ -249,7 +249,7 @@ export function InventoryOverview() {
           <CardHeader>
             <CardTitle className="text-base">Out of stock</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-0">
             {(data?.outOfStockProducts ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No out-of-stock products.
@@ -285,7 +285,7 @@ export function InventoryOverview() {
               <Link href="/dashboard/inventory/history">History</Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-0">
             {(data?.recentMovements ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No inventory movements yet.
@@ -323,7 +323,7 @@ export function InventoryOverview() {
               <Link href="/dashboard/purchases">Purchases</Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-0">
             {(data?.recentPurchases ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">No purchases yet.</p>
             ) : (
@@ -358,7 +358,7 @@ export function InventoryOverview() {
           <CardHeader>
             <CardTitle className="text-base">Recently adjusted</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-0">
             {(data?.recentAdjustments ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No stock adjustments yet.

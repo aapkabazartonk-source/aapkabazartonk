@@ -57,6 +57,15 @@ export interface IInvoiceSnapshot {
   customerStateName: string;
   supplyType: SupplyType;
   placeOfSupply: string;
+  /** Snapshotted at sale time so later settings edits cannot rewrite history. */
+  logoUrl?: string;
+  footerNote?: string;
+  termsAndConditions?: string;
+  thankYouMessage?: string;
+  paperSize?: string;
+  showGstin?: boolean;
+  showLogo?: boolean;
+  showAddress?: boolean;
 }
 
 export interface ISale {
@@ -135,6 +144,14 @@ const InvoiceSnapshotSchema = new Schema<IInvoiceSnapshot>(
     customerStateName: { type: String, default: "", trim: true },
     supplyType: { type: String, enum: SUPPLY_TYPES, required: true },
     placeOfSupply: { type: String, default: "", trim: true },
+    logoUrl: { type: String, default: "", trim: true },
+    footerNote: { type: String, default: "", trim: true },
+    termsAndConditions: { type: String, default: "", trim: true },
+    thankYouMessage: { type: String, default: "", trim: true },
+    paperSize: { type: String, default: "80mm", trim: true },
+    showGstin: { type: Boolean, default: true },
+    showLogo: { type: Boolean, default: true },
+    showAddress: { type: Boolean, default: true },
   },
   { _id: false },
 );
@@ -222,6 +239,7 @@ SaleSchema.index(
   },
 );
 SaleSchema.index({ businessId: 1, createdAt: -1 });
+SaleSchema.index({ businessId: 1, storeId: 1, saleStatus: 1, createdAt: -1 });
 SaleSchema.index({ businessId: 1, paymentStatus: 1, createdAt: -1 });
 
 function rejectSaleMutation() {

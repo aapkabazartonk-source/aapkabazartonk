@@ -7,10 +7,8 @@ import {
   ClipboardList,
   Receipt,
   ShoppingCart,
-  Users,
   Truck,
   BarChart3,
-  FileText,
   Settings,
 } from "lucide-react";
 
@@ -65,28 +63,16 @@ export const DASHBOARD_NAV: NavItem[] = [
     description: "Sales history and invoices",
   },
   {
-    title: "Customers",
-    href: "/dashboard/customers",
-    icon: Users,
-    description: "Customer profiles and history",
-  },
-  {
     title: "Suppliers",
     href: "/dashboard/suppliers",
     icon: Truck,
-    description: "Supplier directory and purchases",
+    description: "Suppliers, payables, and ledgers",
   },
   {
     title: "Analytics",
     href: "/dashboard/analytics",
     icon: BarChart3,
     description: "Insights into business trends",
-  },
-  {
-    title: "Reports",
-    href: "/dashboard/reports",
-    icon: FileText,
-    description: "Exportable business reports",
   },
   {
     title: "Settings",

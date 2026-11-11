@@ -43,7 +43,7 @@ export function InventoryCharts({
           <CardTitle>Stock movement trend</CardTitle>
           <CardDescription>Daily stock in vs stock out</CardDescription>
         </CardHeader>
-        <CardContent className="h-[280px]">
+        <CardContent className="h-[280px] pt-0">
           {stockMovementTrend.length === 0 ? (
             <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
               No stock movements in this period yet.
@@ -90,7 +90,7 @@ export function InventoryCharts({
           <CardTitle>Stock by category</CardTitle>
           <CardDescription>Units currently on hand</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {stockByCategory.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
               No stock distribution data.
@@ -146,7 +146,7 @@ export function InventoryCharts({
           <CardTitle>Inventory valuation by category</CardTitle>
           <CardDescription>Purchase-cost value of current stock</CardDescription>
         </CardHeader>
-        <CardContent className="h-[260px]">
+        <CardContent className="h-[260px] pt-0">
           {valuationByCategory.length === 0 ? (
             <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
               No valuation data yet.

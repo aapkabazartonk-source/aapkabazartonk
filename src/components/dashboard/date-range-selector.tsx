@@ -7,27 +7,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { DashboardPreset } from "@/types/dashboard";
+
+const OPTIONS: Array<{ value: DashboardPreset; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "last_7_days", label: "Last 7 days" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "this_month", label: "This month" },
+];
 
 interface DateRangeSelectorProps {
-  value?: string;
-  onValueChange?: (value: string) => void;
+  value?: DashboardPreset;
+  onValueChange?: (value: DashboardPreset) => void;
+  disabled?: boolean;
 }
 
 export function DateRangeSelector({
-  value = "30d",
+  value = "last_7_days",
   onValueChange,
+  disabled = false,
 }: DateRangeSelectorProps) {
   return (
-    <Select defaultValue={value} onValueChange={onValueChange}>
-      <SelectTrigger className="w-[160px]">
+    <Select
+      value={value}
+      onValueChange={(next) => onValueChange?.(next as DashboardPreset)}
+      disabled={disabled}
+    >
+      <SelectTrigger className="w-[170px]">
         <SelectValue placeholder="Select range" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="7d">Last 7 days</SelectItem>
-        <SelectItem value="30d">Last 30 days</SelectItem>
-        <SelectItem value="90d">Last 90 days</SelectItem>
-        <SelectItem value="ytd">Year to date</SelectItem>
-        <SelectItem value="12m">Last 12 months</SelectItem>
+        {OPTIONS.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFieldArray, useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Trash2 } from "lucide-react";
@@ -22,12 +22,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { fetchJson } from "@/lib/fetch-json";
 import { formatCurrency } from "@/lib/utils";
 import {
   purchaseCreateSchema,
   type PurchaseCreateValues,
 } from "@/lib/validators/purchase";
 import type { ProductRecord } from "@/types/catalog";
+import type { SupplierOption } from "@/types/suppliers";
 
 interface PurchaseFormSheetProps {
   open: boolean;
@@ -44,9 +46,13 @@ export function PurchaseFormSheet({
   submitting,
   onSubmit,
 }: PurchaseFormSheetProps) {
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [selectedGstin, setSelectedGstin] = useState("");
+
   const form = useForm<PurchaseCreateValues>({
     resolver: zodResolver(purchaseCreateSchema) as never,
     defaultValues: {
+      supplierId: null,
       supplierName: "",
       supplierContact: "",
       supplierInvoiceNumber: "",
@@ -72,7 +78,16 @@ export function PurchaseFormSheet({
 
   useEffect(() => {
     if (!open) return;
+    fetchJson<{ data: SupplierOption[] }>("/api/suppliers?options=1")
+      .then((res) => setSuppliers(res.data))
+      .catch(() => setSuppliers([]));
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedGstin("");
     form.reset({
+      supplierId: null,
       supplierName: "",
       supplierContact: "",
       supplierInvoiceNumber: "",
@@ -91,6 +106,15 @@ export function PurchaseFormSheet({
       notes: "",
     });
   }, [open, form]);
+
+  function applySupplier(supplierId: string) {
+    const supplier = suppliers.find((row) => row._id === supplierId);
+    if (!supplier) return;
+    form.setValue("supplierId", supplier._id);
+    form.setValue("supplierName", supplier.name);
+    form.setValue("supplierContact", supplier.phone ?? "");
+    setSelectedGstin(supplier.gstin ?? "");
+  }
 
   // Ensure purchaseDate exists before submit if form opened oddly
   useEffect(() => {
@@ -141,8 +165,36 @@ export function PurchaseFormSheet({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="supplier-name">Supplier name</Label>
-              <Input id="supplier-name" {...form.register("supplierName")} />
+              <Label>Supplier</Label>
+              <Controller
+                control={form.control}
+                name="supplierId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? undefined}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      applySupplier(value);
+                    }}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Select an active supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier._id} value={supplier._id}>
+                          {supplier.name} · {supplier.phone}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {suppliers.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No active suppliers found. Add a supplier first.
+                </p>
+              ) : null}
               {form.formState.errors.supplierName ? (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.supplierName.message}
@@ -150,17 +202,20 @@ export function PurchaseFormSheet({
               ) : null}
             </div>
             <div className="space-y-2">
+              <Label htmlFor="supplier-name">Supplier name</Label>
+              <Input id="supplier-name" {...form.register("supplierName")} readOnly />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="supplier-contact">Supplier phone</Label>
               <Input
                 id="supplier-contact"
                 {...form.register("supplierContact")}
-                placeholder="Optional"
+                readOnly
               />
-              {form.formState.errors.supplierContact ? (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.supplierContact.message}
-                </p>
-              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>GSTIN snapshot</Label>
+              <Input value={selectedGstin || "—"} readOnly />
             </div>
             <div className="space-y-2">
               <Label htmlFor="supplier-invoice">Supplier invoice number</Label>

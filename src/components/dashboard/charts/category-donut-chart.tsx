@@ -15,7 +15,7 @@ export function CategoryDonutChart({ data }: CategoryDonutChartProps) {
         <CardTitle>Sales by category</CardTitle>
         <CardDescription>Category mix in green and purple</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <div className="h-[220px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>

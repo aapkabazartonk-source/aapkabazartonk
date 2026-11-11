@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -12,7 +14,55 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type OwnerProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "OB";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
 export function UserMenu() {
+  const router = useRouter();
+  const [owner, setOwner] = useState<OwnerProfile | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/me")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const payload = (await response.json()) as { data?: OwnerProfile };
+        return payload.data ?? null;
+      })
+      .then((data) => {
+        if (!cancelled && data) setOwner(data);
+      })
+      .catch(() => {
+        /* ignore — proxy will force login if session is gone */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function signOut() {
+    startTransition(async () => {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.replace("/login");
+      router.refresh();
+    });
+  }
+
+  const displayName = owner?.name || "Store Owner";
+  const displayEmail = owner?.email || "Signed in";
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -22,12 +72,12 @@ export function UserMenu() {
         >
           <Avatar className="h-8 w-8 ring-2 ring-purple-soft">
             <AvatarFallback className="bg-purple text-xs font-semibold tracking-wide text-purple-foreground">
-              AD
+              {initials(displayName)}
             </AvatarFallback>
           </Avatar>
           <div className="hidden min-w-0 text-left sm:block">
             <p className="truncate text-sm font-semibold leading-tight tracking-tight text-foreground">
-              Aditya
+              {displayName}
             </p>
             <p className="truncate text-[11px] leading-tight text-muted-foreground">
               Store Owner
@@ -39,31 +89,35 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col gap-0.5">
-            <span>Aditya Sharma</span>
+            <span>{displayName}</span>
             <span className="text-xs font-normal text-muted-foreground">
-              aditya@aapkabazar.com
+              {displayEmail}
             </span>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/settings">
+          <Link href="/dashboard/settings/business">
             <User className="h-4 w-4" />
-            Profile
+            Business profile
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/settings">
+          <Link href="/dashboard/settings/security">
             <Settings className="h-4 w-4" />
-            Settings
+            Security
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/login">
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </Link>
+        <DropdownMenuItem
+          disabled={pending}
+          onSelect={(event) => {
+            event.preventDefault();
+            signOut();
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+          {pending ? "Signing out…" : "Sign out"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

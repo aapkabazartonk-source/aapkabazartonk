@@ -22,11 +22,15 @@ import {
   settlePayments,
   type PaymentSettlement,
 } from "@/lib/payment-settlement";
+import { roundMoney } from "@/lib/money";
+import { roleHasPermission } from "@/lib/permissions";
+import { getBillingRuntimeSettings } from "@/lib/settings-service";
 import type {
   CheckoutValues,
   HoldCartValues,
   QuoteValues,
 } from "@/lib/validators/billing";
+import type { UserRole } from "@/lib/constants";
 import { Business } from "@/models/Business";
 import { Customer } from "@/models/Customer";
 import { HeldCart } from "@/models/HeldCart";
@@ -52,6 +56,7 @@ type BusinessRow = {
   _id: Types.ObjectId;
   name: string;
   legalName?: string;
+  logoUrl?: string;
   gstin?: string;
   isGstRegistered?: boolean;
   pricesIncludeGst?: boolean;
@@ -62,6 +67,8 @@ type BusinessRow = {
   stateCode?: string;
   pincode?: string;
 };
+
+type BillingScope = StockScope;
 
 type StoreRow = {
   _id: Types.ObjectId;
@@ -249,10 +256,14 @@ function buildSnapshot(params: {
   store: StoreRow;
   customer: CustomerRow | null;
   calculation: SaleCalculation;
+  invoiceSettings: Awaited<
+    ReturnType<typeof getBillingRuntimeSettings>
+  >["invoice"];
 }) {
-  const { business, store, customer, calculation } = params;
+  const { business, store, customer, calculation, invoiceSettings } = params;
   const businessState = (business.stateCode ?? "").trim();
   const customerCode = customerStateCode(customer);
+  const showAddress = invoiceSettings.showAddress !== false;
   return {
     businessName: business.name,
     legalName: business.legalName ?? "",
@@ -262,7 +273,7 @@ function buildSnapshot(params: {
     isGstRegistered: Boolean(business.isGstRegistered),
     stateCode: businessState,
     stateName: business.state || stateName(businessState),
-    address: snapshotAddress(store, business),
+    address: showAddress ? snapshotAddress(store, business) : "",
     phone: (store.phone || business.phone || "").trim(),
     storeName: store.name,
     storeCode: store.code,
@@ -275,22 +286,44 @@ function buildSnapshot(params: {
     customerStateName: stateName(customerCode),
     supplyType: calculation.supplyType,
     placeOfSupply: stateName(customerCode || businessState) || business.state || "",
+    logoUrl: invoiceSettings.showLogo ? (business.logoUrl ?? "").trim() : "",
+    footerNote: invoiceSettings.footerNote ?? "",
+    termsAndConditions: invoiceSettings.termsAndConditions ?? "",
+    thankYouMessage: invoiceSettings.thankYouMessage ?? "",
+    paperSize: invoiceSettings.paperSize ?? "80mm",
+    showGstin: invoiceSettings.showGstin !== false,
+    showLogo: invoiceSettings.showLogo !== false,
+    showAddress,
   };
+}
+
+function sanitizeDocumentPrefix(value: string, fallback: string) {
+  const cleaned = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!cleaned || !/^[A-Z]/.test(cleaned)) return fallback;
+  return cleaned.slice(0, 12);
 }
 
 async function nextSaleNumbers(
   businessId: Types.ObjectId,
   invoiceType: InvoiceType,
   session: ClientSession,
+  prefixes: { salePrefix: string; taxInvoicePrefix: string; billOfSupplyPrefix: string },
 ) {
+  const salePrefix = sanitizeDocumentPrefix(prefixes.salePrefix, "SAL");
+  const invoicePrefix = sanitizeDocumentPrefix(
+    invoiceType === "TAX_INVOICE"
+      ? prefixes.taxInvoicePrefix
+      : prefixes.billOfSupplyPrefix,
+    invoiceType === "TAX_INVOICE" ? "INV" : "BOS",
+  );
+
   const saleNumber = await nextDailySequence(async (prefix) => {
     return Sale.countDocuments({
       businessId,
       saleNumber: { $regex: `^${prefix}` },
     }).session(session);
-  }, "SAL");
+  }, salePrefix);
 
-  const invoicePrefix = invoiceType === "TAX_INVOICE" ? "INV" : "BOS";
   const invoiceNumber = await nextDailySequence(async (prefix) => {
     return Sale.countDocuments({
       businessId,
@@ -299,6 +332,68 @@ async function nextSaleNumbers(
   }, invoicePrefix);
 
   return { saleNumber, invoiceNumber };
+}
+
+async function assertBillingPreferences(params: {
+  businessId: Types.ObjectId;
+  billDiscount: number;
+  allowCredit: boolean;
+  role?: UserRole | null;
+  subtotalHint?: number;
+}) {
+  const runtime = await getBillingRuntimeSettings(params.businessId);
+  const billing = runtime.billing;
+
+  if (params.allowCredit && !billing.allowCreditSales) {
+    throw new BillingError(
+      "Credit sales are disabled in billing settings.",
+      409,
+      "CREDIT_DISABLED",
+    );
+  }
+
+  const discount = roundMoney(params.billDiscount ?? 0);
+  if (discount > 0 && !billing.enableBillDiscount) {
+    throw new BillingError(
+      "Bill discounts are disabled in billing settings.",
+      409,
+      "DISCOUNT_DISABLED",
+    );
+  }
+
+  if (discount > 0) {
+    const canOverride = roleHasPermission(
+      params.role ?? "owner",
+      "pos.discount_override",
+    );
+    if (billing.maxBillDiscountAmount > 0 && discount > billing.maxBillDiscountAmount) {
+      if (!canOverride) {
+        throw new BillingError(
+          `Bill discount cannot exceed ${billing.maxBillDiscountAmount}.`,
+          403,
+          "DISCOUNT_LIMIT",
+        );
+      }
+    }
+    if (
+      billing.maxBillDiscountPercent < 100 &&
+      params.subtotalHint &&
+      params.subtotalHint > 0
+    ) {
+      const maxByPercent = roundMoney(
+        (params.subtotalHint * billing.maxBillDiscountPercent) / 100,
+      );
+      if (discount > maxByPercent && !canOverride) {
+        throw new BillingError(
+          `Bill discount cannot exceed ${billing.maxBillDiscountPercent}% without override permission.`,
+          403,
+          "DISCOUNT_LIMIT",
+        );
+      }
+    }
+  }
+
+  return runtime;
 }
 
 async function findIdempotentSale(businessId: Types.ObjectId, key: string) {
@@ -345,14 +440,32 @@ function publicCustomer(customer: CustomerRow | null) {
   };
 }
 
-export async function quoteSale(params: { data: QuoteValues; scope: StockScope }) {
+export async function quoteSale(params: {
+  data: QuoteValues;
+  scope: BillingScope;
+}) {
   const { data, scope } = params;
+  await assertBillingPreferences({
+    businessId: scope.businessId,
+    billDiscount: data.billDiscount,
+    allowCredit: Boolean(data.allowCredit),
+    role: scope.role,
+  });
+
   const built = await buildCalculation({
     scope,
     items: data.items,
     billDiscount: data.billDiscount,
     customerId: data.customerId,
     enforceStock: true,
+  });
+
+  await assertBillingPreferences({
+    businessId: scope.businessId,
+    billDiscount: data.billDiscount,
+    allowCredit: Boolean(data.allowCredit),
+    role: scope.role,
+    subtotalHint: built.calculation.totals.subtotal,
   });
 
   let settlement: PaymentSettlement | null = null;
@@ -374,10 +487,17 @@ export async function quoteSale(params: { data: QuoteValues; scope: StockScope }
 
 export async function checkoutSale(params: {
   data: CheckoutValues;
-  scope: StockScope;
+  scope: BillingScope;
 }) {
   const { data, scope } = params;
   const key = data.idempotencyKey.trim();
+
+  await assertBillingPreferences({
+    businessId: scope.businessId,
+    billDiscount: data.billDiscount,
+    allowCredit: Boolean(data.allowCredit),
+    role: scope.role,
+  });
 
   const already = await Sale.findOne({
     businessId: scope.businessId,
@@ -390,6 +510,8 @@ export async function checkoutSale(params: {
       replayed: true,
     };
   }
+
+  const runtime = await getBillingRuntimeSettings(scope.businessId);
 
   try {
     const result = await withMongoTransaction(async (session) => {
@@ -456,16 +578,30 @@ export async function checkoutSale(params: {
         }
       }
 
+      await assertBillingPreferences({
+        businessId: scope.businessId,
+        billDiscount: data.billDiscount,
+        allowCredit: Boolean(data.allowCredit),
+        role: scope.role,
+        subtotalHint: built.calculation.totals.subtotal,
+      });
+
       const numbers = await nextSaleNumbers(
         scope.businessId,
         built.calculation.invoiceType,
         session,
+        {
+          salePrefix: runtime.invoice.salePrefix,
+          taxInvoicePrefix: runtime.invoice.taxInvoicePrefix,
+          billOfSupplyPrefix: runtime.invoice.billOfSupplyPrefix,
+        },
       );
       const snapshot = buildSnapshot({
         business: built.business,
         store,
         customer: built.customer,
         calculation: built.calculation,
+        invoiceSettings: runtime.invoice,
       });
 
       const [sale] = await Sale.create(

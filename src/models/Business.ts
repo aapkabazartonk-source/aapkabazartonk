@@ -6,16 +6,33 @@ import {
   type Model,
   type Types,
 } from "mongoose";
+import type { BusinessType } from "@/lib/constants";
+
+const BUSINESS_TYPE_VALUES: BusinessType[] = [
+  "retail",
+  "wholesale",
+  "kirana",
+  "pharmacy",
+  "electronics",
+  "other",
+];
 
 /**
  * Tenant root. Inventory, purchases, products, and categories belong to a business.
  * Users will point at a business once authentication is integrated (see src/lib/tenant.ts).
+ * Nested invoice/printer/billing prefs live on BusinessSettings — not duplicated here.
  */
 export interface IBusiness {
   name: string;
   /** Stable key for the single pre-auth workspace. Real signups must not reuse this code. */
   code: string;
   legalName: string;
+  ownerName: string;
+  logoUrl: string;
+  country: string;
+  businessType: BusinessType;
+  /** Month number 1–12 when the financial year starts (India default April = 4). */
+  financialYearStartMonth: number;
   gstin: string;
   isGstRegistered: boolean;
   /** When true, product selling prices already include GST. */
@@ -57,6 +74,35 @@ const BusinessSchema = new Schema<IBusiness>(
       default: "",
       trim: true,
       maxlength: 200,
+    },
+    ownerName: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 120,
+    },
+    logoUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
+    country: {
+      type: String,
+      default: "India",
+      trim: true,
+      maxlength: 80,
+    },
+    businessType: {
+      type: String,
+      enum: BUSINESS_TYPE_VALUES,
+      default: "retail",
+    },
+    financialYearStartMonth: {
+      type: Number,
+      default: 4,
+      min: 1,
+      max: 12,
     },
     gstin: {
       type: String,

@@ -135,7 +135,7 @@ export function BusinessSettingsForm() {
             <Switch checked={form.pricesIncludeGst} onCheckedChange={(pricesIncludeGst) => set({ pricesIncludeGst })} />
           </div>
           <div className="md:col-span-2">
-            <Button type="button" className="h-11 bg-[#128C7E] text-white hover:bg-[#075E54]" disabled={saving} onClick={() => void save()}>
+            <Button type="button" className="h-11 bg-primary text-primary-foreground hover:bg-primary/90" disabled={saving} onClick={() => void save()}>
               {saving ? "Saving…" : "Save settings"}
             </Button>
           </div>

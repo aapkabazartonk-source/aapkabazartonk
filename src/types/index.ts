@@ -77,6 +77,7 @@ export interface DashboardStat {
   change: string;
   trend: "up" | "down" | "neutral";
   description: string;
+  href?: string;
 }
 
 export interface RevenuePoint {

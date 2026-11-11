@@ -234,11 +234,11 @@ export async function GET(request: Request) {
     ]);
 
     const chartColors = [
-      "#128C7E",
-      "#A5CB62",
+      "#A3CA69",
+      "#9299C9",
       "#7EAB3A",
       "#E5F0D5",
-      "#5F8F86",
+      "#B8BFD9",
       "#C5DF8F",
       "#252B24",
       "#858C80",

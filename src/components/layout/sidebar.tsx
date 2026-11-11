@@ -31,7 +31,7 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
         )}
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-sm)]">
-          <Store className="h-5 w-5 text-foreground" />
+          <Store className="h-5 w-5" />
         </div>
         {!collapsed && (
           <div className="min-w-0 animate-fade-in">

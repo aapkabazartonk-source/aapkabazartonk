@@ -80,6 +80,7 @@ const PaymentSchema = new Schema<IPayment>(
 
 PaymentSchema.index({ businessId: 1, sale: 1, sequence: 1 }, { unique: true });
 PaymentSchema.index({ businessId: 1, createdAt: -1 });
+PaymentSchema.index({ businessId: 1, storeId: 1, status: 1, createdAt: -1 });
 
 function rejectPaymentMutation() {
   throw new Error("Payment records are immutable and cannot be modified.");

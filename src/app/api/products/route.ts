@@ -116,6 +116,7 @@ export async function GET(request: Request) {
       Product.countDocuments({ businessId: tenant.businessId, isActive: true }),
       Product.countDocuments({
         businessId: tenant.businessId,
+        isActive: true,
         $expr: {
           $and: [
             { $gt: ["$currentStock", 0] },
@@ -124,7 +125,7 @@ export async function GET(request: Request) {
         },
       }),
       Product.aggregate<{ value: number }>([
-        { $match: { businessId: tenant.businessId } },
+        { $match: { businessId: tenant.businessId, isActive: true } },
         {
           $group: {
             _id: null,

@@ -1,4 +1,5 @@
 import { escapeRegex, handleApiError, isValidObjectId, jsonError, jsonOk } from "@/lib/api";
+import { getBillingRuntimeSettings } from "@/lib/settings-service";
 import { requireTenant } from "@/lib/tenant";
 import { stateName } from "@/lib/india-states";
 import { Business } from "@/models/Business";
@@ -47,11 +48,11 @@ export async function GET(request: Request) {
 
     if (and.length > 0) filter.$and = and;
 
-    const [products, categories, business, store] = await Promise.all([
+    const [products, categories, business, store, runtime] = await Promise.all([
       Product.find(filter)
         .sort({ name: 1 })
         .limit(limit)
-        .select("name sku barcode sellingPrice currentStock unit hsn gstRate category")
+        .select("name sku barcode sellingPrice currentStock unit hsn gstRate category images")
         .populate("category", "name")
         .lean(),
       Category.find({
@@ -64,10 +65,11 @@ export async function GET(request: Request) {
         .lean(),
       Business.findById(tenant.businessId)
         .select(
-          "name legalName gstin isGstRegistered pricesIncludeGst state stateCode phone address city pincode",
+          "name legalName logoUrl gstin isGstRegistered pricesIncludeGst state stateCode phone address city pincode",
         )
         .lean(),
       Store.findById(tenant.storeId).select("name code phone address city state pincode").lean(),
+      getBillingRuntimeSettings(tenant.businessId),
     ]);
 
     return jsonOk({
@@ -76,6 +78,7 @@ export async function GET(request: Request) {
       business: {
         name: business?.name ?? "",
         legalName: business?.legalName ?? "",
+        logoUrl: business?.logoUrl ?? "",
         gstin: business?.gstin ?? "",
         isGstRegistered: Boolean(business?.isGstRegistered),
         pricesIncludeGst: Boolean(business?.pricesIncludeGst),
@@ -83,6 +86,14 @@ export async function GET(request: Request) {
         stateName: business?.state || stateName(business?.stateCode),
         phone: store?.phone || business?.phone || "",
         storeName: store?.name ?? "",
+      },
+      preferences: {
+        billing: runtime.billing,
+        printer: runtime.printer,
+        invoice: {
+          paperSize: runtime.invoice.paperSize,
+          thankYouMessage: runtime.invoice.thankYouMessage,
+        },
       },
     });
   } catch (error) {

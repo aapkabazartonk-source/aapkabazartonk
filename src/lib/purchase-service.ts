@@ -9,6 +9,7 @@ import {
   type StockScope,
 } from "@/lib/inventory-stock";
 import { multiplyMoney, roundMoney, sumMoney } from "@/lib/money";
+import { insertSupplierLedgerEntry } from "@/lib/supplier-ledger";
 import type {
   PurchaseCreateValues,
   PurchaseUpdateValues,
@@ -111,11 +112,14 @@ async function assertSupplier(
     _id: supplierId,
     businessId,
     isActive: { $ne: false },
-  }).select("_id");
+  }).select("_id name phone gstin");
   if (!supplier) {
-    throw new InventoryError("Supplier not found.", 404);
+    throw new InventoryError(
+      "Supplier not found or inactive. Only active suppliers can be used on new purchases.",
+      404,
+    );
   }
-  return supplier._id;
+  return supplier;
 }
 
 async function nextPurchaseNumber(
@@ -139,7 +143,21 @@ export async function createPurchaseDraft(params: {
   const { data, scope } = params;
   const items = await buildPurchaseItems(data.items, scope.businessId);
   const totals = summarizeItems(items, data.discount ?? 0);
-  const supplier = await assertSupplier(data.supplierId, scope.businessId);
+  const linkedSupplier = await assertSupplier(
+    data.supplierId,
+    scope.businessId,
+  );
+
+  const supplierName =
+    data.supplierName.trim() || linkedSupplier?.name?.trim() || "";
+  const supplierContact =
+    (data.supplierContact ?? "").trim() ||
+    (linkedSupplier?.phone ?? "").trim();
+  const supplierGstin = (linkedSupplier?.gstin ?? "").trim().toUpperCase();
+
+  if (!supplierName) {
+    throw new InventoryError("Supplier name is required.", 400);
+  }
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -148,15 +166,19 @@ export async function createPurchaseDraft(params: {
         businessId: scope.businessId,
         storeId: scope.storeId,
         purchaseNumber,
-        supplierName: data.supplierName.trim(),
-        supplierContact: (data.supplierContact ?? "").trim(),
+        supplierName,
+        supplierContact,
         supplierInvoiceNumber: (data.supplierInvoiceNumber ?? "").trim(),
-        supplier,
+        supplierGstin,
+        supplier: linkedSupplier?._id ?? null,
         purchaseDate: data.purchaseDate ?? new Date(),
         expectedDeliveryDate: data.expectedDeliveryDate ?? null,
         items,
         ...totals,
         status: "DRAFT",
+        amountPaid: 0,
+        balanceDue: 0,
+        paymentStatus: "UNPAID",
         notes: (data.notes ?? "").trim(),
         createdBy: scope.performedBy ?? null,
       });
@@ -202,7 +224,22 @@ export async function updatePurchaseDraft(
     purchase.supplierInvoiceNumber = data.supplierInvoiceNumber.trim();
   }
   if (data.supplierId !== undefined) {
-    purchase.supplier = await assertSupplier(data.supplierId, scope.businessId);
+    const linkedSupplier = await assertSupplier(
+      data.supplierId,
+      scope.businessId,
+    );
+    purchase.supplier = linkedSupplier?._id ?? null;
+    if (linkedSupplier) {
+      if (data.supplierName === undefined) {
+        purchase.supplierName = linkedSupplier.name;
+      }
+      if (data.supplierContact === undefined) {
+        purchase.supplierContact = linkedSupplier.phone ?? "";
+      }
+      purchase.supplierGstin = (linkedSupplier.gstin ?? "").trim().toUpperCase();
+    } else {
+      purchase.supplierGstin = "";
+    }
   }
   if (data.purchaseDate !== undefined) {
     purchase.purchaseDate = data.purchaseDate;
@@ -309,6 +346,48 @@ export async function receivePurchase(params: {
         referenceNumber: claimed.purchaseNumber,
         session,
       });
+    }
+
+    // Payable side effects only when linked to a supplier directory record.
+    // Drafts never touch payables; legacy free-text purchases remain stock-only.
+    claimed.amountPaid = 0;
+    claimed.balanceDue = claimed.total;
+    claimed.paymentStatus = "UNPAID";
+    await claimed.save({ session });
+
+    if (claimed.supplier) {
+      const supplier = await Supplier.findOneAndUpdate(
+        {
+          _id: claimed.supplier,
+          businessId: scope.businessId,
+        },
+        { $inc: { currentBalance: claimed.total } },
+        { session, returnDocument: "after" },
+      );
+
+      if (!supplier) {
+        throw new InventoryError(
+          "Linked supplier was not found for this purchase.",
+          404,
+        );
+      }
+
+      await insertSupplierLedgerEntry(
+        {
+          businessId: scope.businessId,
+          supplierId: supplier._id,
+          entryType: "PURCHASE",
+          entryDate: claimed.receivedAt ?? receivedAt,
+          referenceType: "PURCHASE",
+          referenceId: claimed._id,
+          referenceNumber: claimed.purchaseNumber,
+          description: `Purchase received ${claimed.purchaseNumber}`,
+          debit: claimed.total,
+          credit: 0,
+          createdBy: scope.performedBy ?? null,
+        },
+        session,
+      );
     }
 
     return claimed;

@@ -147,6 +147,7 @@ ProductSchema.index(
   },
 );
 ProductSchema.index({ category: 1, isActive: 1 });
+ProductSchema.index({ businessId: 1, isActive: 1, category: 1 });
 ProductSchema.index({ currentStock: 1, minStockLevel: 1 });
 ProductSchema.index({ name: "text", sku: "text", barcode: "text", description: "text" });
 ProductSchema.index({ createdAt: -1 });

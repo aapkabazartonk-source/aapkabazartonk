@@ -33,6 +33,7 @@ describe("billing integration", { concurrency: 1 }, () => {
     await connectToDatabase();
     const billing = await import("../src/lib/billing-service.ts");
     const { requireTenant, TenantError } = await import("../src/lib/tenant.ts");
+    // requireTenant without a session must fail once auth is enabled.
     const { Business } = await import("../src/models/Business.ts");
     const { Store } = await import("../src/models/Store.ts");
     const { Category } = await import("../src/models/Category.ts");
@@ -439,7 +440,11 @@ describe("billing integration", { concurrency: 1 }, () => {
       assert.equal(visible.data.length, 0);
 
       await models.Business.updateOne({ _id: other._id }, { $set: { isActive: true } });
-      await assert.rejects(() => requireTenant(), TenantError);
+      await assert.rejects(
+        () => requireTenant(),
+        (error: unknown) =>
+          error instanceof TenantError && error.status === 401,
+      );
     } finally {
       await models.Business.updateOne({ _id: business._id }, { $set: original });
       if (otherBusinessId) {

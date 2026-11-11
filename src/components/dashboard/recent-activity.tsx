@@ -30,7 +30,7 @@ export function RecentActivity({ data }: RecentActivityProps) {
         <CardTitle>Recent activity</CardTitle>
         <CardDescription>Operational events across your store</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-0">
         {data.map((item, index) => {
           const Icon = activityIcon[item.type];
           const isPurple = index % 2 === 1;

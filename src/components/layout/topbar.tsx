@@ -1,10 +1,19 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { Menu, Search } from "lucide-react";
-import { GlobalSearch } from "@/components/layout/global-search";
+import { useOwnerSession } from "@/components/layout/owner-session";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Button } from "@/components/ui/button";
+
+const GlobalSearch = dynamic(
+  () =>
+    import("@/components/layout/global-search").then(
+      (module) => module.GlobalSearch,
+    ),
+  { ssr: false },
+);
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -57,57 +66,12 @@ function firstName(fullName: string) {
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
+  const { displayName } = useOwnerSession();
   const [greeting, setGreeting] = useState("Welcome");
-  const [ownerName, setOwnerName] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     setGreeting(getGreeting(new Date()));
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadOwnerName() {
-      try {
-        const businessResponse = await fetch("/api/settings/business");
-        if (businessResponse.ok) {
-          const payload = (await businessResponse.json()) as {
-            data?: { ownerName?: string };
-          };
-          const fromProfile = payload.data?.ownerName?.trim() || "";
-          if (fromProfile) {
-            if (!cancelled) setOwnerName(fromProfile);
-            return;
-          }
-        }
-
-        const meResponse = await fetch("/api/auth/me");
-        if (!meResponse.ok) return;
-        const mePayload = (await meResponse.json()) as {
-          data?: { name?: string };
-        };
-        const fromAuth = mePayload.data?.name?.trim() || "";
-        if (!cancelled && fromAuth) setOwnerName(fromAuth);
-      } catch {
-        /* ignore — greeting falls back without a name */
-      }
-    }
-
-    void loadOwnerName();
-
-    function onOwnerNameUpdated(event: Event) {
-      const custom = event as CustomEvent<string>;
-      const next = custom.detail?.trim();
-      if (next) setOwnerName(next);
-      else void loadOwnerName();
-    }
-
-    window.addEventListener("owner-name-updated", onOwnerNameUpdated);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("owner-name-updated", onOwnerNameUpdated);
-    };
   }, []);
 
   useEffect(() => {
@@ -121,7 +85,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const welcomeName = firstName(ownerName);
+  const welcomeName = firstName(displayName);
 
   return (
     <>

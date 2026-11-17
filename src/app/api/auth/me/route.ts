@@ -1,6 +1,7 @@
 import { handleApiError, jsonError, jsonOk } from "@/lib/api";
 import { getAuthContext } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
+import { Business } from "@/models/Business";
 import { User } from "@/models/User";
 
 export async function GET(request: Request) {
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
     const user = await User.findById(auth.userId)
-      .select("name email role isActive sessionVersion avatarUrl")
+      .select("name email role isActive sessionVersion avatarUrl businessId")
       .lean();
 
     if (!user || user.isActive === false) {
@@ -26,10 +27,20 @@ export async function GET(request: Request) {
       return jsonError("Session expired. Please sign in again.", 401);
     }
 
+    let ownerDisplayName = user.name || "";
+    if (user.businessId) {
+      const business = await Business.findById(user.businessId)
+        .select("ownerName")
+        .lean();
+      const profileName = business?.ownerName?.trim() || "";
+      if (profileName) ownerDisplayName = profileName;
+    }
+
     return jsonOk({
       data: {
         id: String(user._id),
         name: user.name,
+        ownerDisplayName,
         email: user.email,
         role: user.role,
         avatarUrl: user.avatarUrl || "",

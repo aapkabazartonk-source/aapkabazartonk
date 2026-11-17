@@ -18,7 +18,11 @@ export const BOOTSTRAP_STORE_CODE = "MAIN";
 
 let infrastructureReady: Promise<void> | null = null;
 
-/** Ensures DEFAULT business/store exist and legacy rows are backfilled. */
+/**
+ * Ensures DEFAULT business/store exist.
+ * Hot path is cheap once the store already exists — no index sync / legacy
+ * backfills on every cold start unless TENANT_MIGRATE=1.
+ */
 export async function requireTenantInfrastructure() {
   if (!infrastructureReady) {
     infrastructureReady = bootstrapTenant().catch((error) => {
@@ -31,6 +35,30 @@ export async function requireTenantInfrastructure() {
 }
 
 async function bootstrapTenant() {
+  const existingBusiness = await Business.findOne({
+    code: BOOTSTRAP_BUSINESS_CODE,
+    isActive: true,
+  })
+    .select("_id")
+    .lean();
+
+  if (existingBusiness) {
+    const existingStore = await Store.findOne({
+      businessId: existingBusiness._id,
+      isDefault: true,
+      isActive: true,
+    })
+      .select("_id")
+      .lean();
+
+    if (existingStore) {
+      if (process.env.TENANT_MIGRATE === "1") {
+        await runLegacyMigrations(existingBusiness._id, existingStore._id);
+      }
+      return;
+    }
+  }
+
   const business = await Business.findOneAndUpdate(
     { code: BOOTSTRAP_BUSINESS_CODE },
     {
@@ -61,9 +89,23 @@ async function bootstrapTenant() {
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
+  await BusinessSettings.findOneAndUpdate(
+    { businessId: business._id },
+    { $setOnInsert: { businessId: business._id } },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
+  );
+
+  // First-time / incomplete setup only.
+  await runLegacyMigrations(business._id, store._id);
+}
+
+async function runLegacyMigrations(
+  businessId: { toString(): string },
+  storeId: { toString(): string },
+) {
   const ownership = {
-    businessId: business._id,
-    storeId: store._id,
+    businessId,
+    storeId,
   };
   const missingBusiness = {
     $or: [{ businessId: { $exists: false } }, { businessId: null }],
@@ -73,7 +115,7 @@ async function bootstrapTenant() {
     Product.updateMany(missingBusiness, { $set: ownership }),
     Category.updateMany(
       { $or: [{ businessId: { $exists: false } }, { businessId: null }] },
-      { $set: { businessId: business._id } },
+      { $set: { businessId } },
     ),
     Purchase.updateMany(missingBusiness, { $set: ownership }),
     InventoryLog.collection.updateMany(missingBusiness, { $set: ownership }),
@@ -81,19 +123,21 @@ async function bootstrapTenant() {
     Supplier.updateMany(missingBusiness, { $set: ownership }),
     Customer.updateMany(
       { $or: [{ businessId: { $exists: false } }, { businessId: null }] },
-      { $set: { businessId: business._id } },
+      { $set: { businessId } },
     ),
     Order.updateMany(missingBusiness, { $set: ownership }),
   ]);
 
   await BusinessSettings.findOneAndUpdate(
-    { businessId: business._id },
-    { $setOnInsert: { businessId: business._id } },
+    { businessId },
+    { $setOnInsert: { businessId } },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
   await backfillPurchaseSnapshots();
 
+  // Index sync is expensive against Atlas — only during explicit migration /
+  // first-time bootstrap, never on the normal request hot path.
   await Promise.all([
     Business.syncIndexes(),
     BusinessSettings.syncIndexes(),

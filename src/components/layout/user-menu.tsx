@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { useOwnerSession } from "@/components/layout/owner-session";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -14,13 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type OwnerProfile = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-};
-
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "OB";
@@ -30,61 +24,8 @@ function initials(name: string) {
 
 export function UserMenu() {
   const router = useRouter();
-  const pathname = usePathname();
-  const [owner, setOwner] = useState<OwnerProfile | null>(null);
-  const [ownerName, setOwnerName] = useState("");
+  const { owner, displayName } = useOwnerSession();
   const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [meResponse, businessResponse] = await Promise.all([
-          fetch("/api/auth/me"),
-          fetch("/api/settings/business"),
-        ]);
-
-        let authName = "";
-        if (meResponse.ok) {
-          const payload = (await meResponse.json()) as { data?: OwnerProfile };
-          if (!cancelled && payload.data) {
-            setOwner(payload.data);
-            authName = payload.data.name?.trim() || "";
-          }
-        }
-
-        let profileName = "";
-        if (businessResponse.ok) {
-          const payload = (await businessResponse.json()) as {
-            data?: { ownerName?: string };
-          };
-          profileName = payload.data?.ownerName?.trim() || "";
-        }
-
-        if (!cancelled) {
-          setOwnerName(profileName || authName);
-        }
-      } catch {
-        /* ignore — proxy will force login if session is gone */
-      }
-    }
-
-    void load();
-
-    function onOwnerNameUpdated(event: Event) {
-      const custom = event as CustomEvent<string>;
-      const next = custom.detail?.trim();
-      if (next) setOwnerName(next);
-      else void load();
-    }
-
-    window.addEventListener("owner-name-updated", onOwnerNameUpdated);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("owner-name-updated", onOwnerNameUpdated);
-    };
-  }, [pathname]);
 
   function signOut() {
     startTransition(async () => {
@@ -94,7 +35,6 @@ export function UserMenu() {
     });
   }
 
-  const displayName = ownerName || owner?.name || "Store Owner";
   const displayEmail = owner?.email || "Signed in";
 
   return (

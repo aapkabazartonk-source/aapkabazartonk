@@ -17,9 +17,9 @@ export default function LoginPage() {
       <Suspense
         fallback={
           <div className="space-y-4">
-            <div className="h-10 animate-pulse rounded-lg bg-[#F4F6EF]" />
-            <div className="h-10 animate-pulse rounded-lg bg-[#F4F6EF]" />
-            <div className="h-11 animate-pulse rounded-lg bg-[#F4F6EF]" />
+            <div className="h-10 animate-pulse rounded-lg bg-secondary" />
+            <div className="h-10 animate-pulse rounded-lg bg-purple-soft" />
+            <div className="h-11 animate-pulse rounded-lg bg-secondary" />
           </div>
         }
       >

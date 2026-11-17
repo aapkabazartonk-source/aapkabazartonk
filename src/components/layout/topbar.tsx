@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { GlobalSearch } from "@/components/layout/global-search";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Button } from "@/components/ui/button";
@@ -172,19 +172,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             onClick={() => setSearchOpen(true)}
           >
             <Search className="h-5 w-5" />
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="relative rounded-full bg-background hover:bg-muted"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5 text-foreground/80" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple px-1 text-[10px] font-semibold text-purple-foreground">
-              3
-            </span>
           </Button>
 
           <UserMenu />

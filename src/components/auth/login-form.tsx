@@ -104,7 +104,7 @@ export function LoginForm() {
           <Label htmlFor="password">Password</Label>
           <Link
             href="/forgot-password"
-            className="text-xs font-medium text-[#128C7E] hover:underline"
+            className="text-xs font-medium text-purple hover:underline"
           >
             Forgot password?
           </Link>
@@ -147,7 +147,7 @@ export function LoginForm() {
           checked={rememberMe}
           onChange={(event) => setRememberMe(event.target.checked)}
           disabled={pending}
-          className="h-4 w-4 rounded border-border text-[#128C7E] accent-[#128C7E]"
+          className="h-4 w-4 rounded border-border accent-primary"
         />
         Remember me for 30 days
       </label>
@@ -163,7 +163,7 @@ export function LoginForm() {
 
       <Button
         type="submit"
-        className="h-11 w-full bg-[#128C7E] text-white hover:bg-[#0f7a6e]"
+        className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90"
         disabled={pending}
       >
         {pending ? (

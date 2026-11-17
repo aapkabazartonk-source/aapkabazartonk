@@ -1,3 +1,5 @@
+import { redirectToLogin } from "@/lib/auth-client";
+
 export class ApiClientError extends Error {
   status: number;
   details?: unknown;
@@ -15,6 +17,7 @@ export async function fetchJson<T>(
   init?: RequestInit,
 ): Promise<T> {
   const response = await fetch(input, {
+    credentials: "same-origin",
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -30,6 +33,10 @@ export async function fetchJson<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      redirectToLogin();
+    }
+
     const message =
       payload &&
       typeof payload === "object" &&

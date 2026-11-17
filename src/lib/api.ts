@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { ZodError } from "zod";
+import { SESSION_COOKIE_NAME } from "@/lib/session-crypto";
 
 export function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -24,6 +25,28 @@ export function jsonError(message: string, status = 400, details?: unknown) {
   );
 }
 
+/** 401 + clear HttpOnly session cookie so /login is not bounced back to dashboard. */
+export function jsonUnauthorized(
+  message = "Sign in is required.",
+  details?: unknown,
+) {
+  const response = NextResponse.json(
+    {
+      error: message,
+      ...(details !== undefined ? { details } : {}),
+    },
+    { status: 401 },
+  );
+  response.cookies.set(SESSION_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  return response;
+}
+
 export function handleApiError(error: unknown) {
   if (error instanceof ZodError) {
     return jsonError("Validation failed", 400, error.flatten());
@@ -43,10 +66,12 @@ export function handleApiError(error: unknown) {
     "status" in error &&
     "message" in error
   ) {
-    return jsonError(
-      String((error as { message: string }).message),
-      Number((error as { status: number }).status) || 400,
-    );
+    const status = Number((error as { status: number }).status) || 400;
+    const message = String((error as { message: string }).message);
+    if (status === 401) {
+      return jsonUnauthorized(message);
+    }
+    return jsonError(message, status);
   }
 
   if (

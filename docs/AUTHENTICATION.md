@@ -82,8 +82,9 @@ The `/forgot-password` page documents this flow for the owner.
 | --- | --- |
 | Sign in | Sets `ab_session` HttpOnly cookie (12h, or 30d with Remember me) |
 | Refresh | Cookie remains; APIs re-validate signature + `sessionVersion` |
-| Sign out | Clears cookie and increments `sessionVersion` so the sealed token cannot be reused |
-| Password change / CLI reset | Increments `sessionVersion`; old cookies fail |
+| Sign out | Clears the session cookie |
+| Password change / CLI reset | Increments `sessionVersion`; old cookies fail with `401` and the cookie is cleared |
+| Auth `401` (expired / revoked) | Clears `ab_session` and sends the browser to `/login?reauth=1` so a stale JWT cannot bounce back to `/dashboard` |
 
 ## Routes
 

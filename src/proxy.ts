@@ -10,6 +10,17 @@ const PUBLIC_PAGE_PATHS = new Set([
   "/forgot-password",
 ]);
 
+function clearSessionCookie(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  return response;
+}
+
 function isPublicApi(pathname: string) {
   return (
     pathname === "/api/auth/login" ||
@@ -46,25 +57,34 @@ export async function proxy(request: NextRequest) {
   }
 
   const authenticated = await hasValidSession(request);
+  const forceReauth = request.nextUrl.searchParams.get("reauth") === "1";
 
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) {
       return NextResponse.next();
     }
     if (!authenticated) {
-      return NextResponse.json(
-        { error: "Sign in is required." },
-        { status: 401 },
+      return clearSessionCookie(
+        NextResponse.json(
+          { error: "Sign in is required." },
+          { status: 401 },
+        ),
       );
     }
     return NextResponse.next();
   }
 
   if (PUBLIC_PAGE_PATHS.has(pathname)) {
-    if (authenticated) {
+    // Stale JWT (valid signature, revoked sessionVersion) still decrypts in
+    // the proxy. ?reauth=1 lets the login page load and drops the cookie.
+    if (authenticated && !forceReauth) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-    return NextResponse.next();
+    const response = NextResponse.next();
+    if (forceReauth) {
+      clearSessionCookie(response);
+    }
+    return response;
   }
 
   if (pathname === "/") {

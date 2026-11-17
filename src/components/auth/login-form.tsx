@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { clearAuthRedirectFlag } from "@/lib/auth-client";
 
 function safeNextPath(raw: string | null) {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
@@ -34,6 +35,10 @@ export function LoginForm() {
   }>({});
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    clearAuthRedirectFlag();
+  }, []);
+
   function validate() {
     const nextErrors: { email?: string; password?: string } = {};
     if (!email.trim()) nextErrors.email = "Email is required.";
@@ -54,6 +59,7 @@ export function LoginForm() {
       try {
         const response = await fetch("/api/auth/login", {
           method: "POST",
+          credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: email.trim(),

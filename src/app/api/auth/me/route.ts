@@ -1,4 +1,4 @@
-import { handleApiError, jsonError, jsonOk } from "@/lib/api";
+import { handleApiError, jsonOk, jsonUnauthorized } from "@/lib/api";
 import { getAuthContext } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
 import { Business } from "@/models/Business";
@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     const auth = await getAuthContext(request);
     if (!auth.userId) {
-      return jsonError("Sign in is required.", 401);
+      return jsonUnauthorized("Sign in is required.");
     }
 
     await connectToDatabase();
@@ -17,14 +17,14 @@ export async function GET(request: Request) {
       .lean();
 
     if (!user || user.isActive === false) {
-      return jsonError("Sign in is required.", 401);
+      return jsonUnauthorized("Sign in is required.");
     }
 
     if (
       typeof auth.sessionVersion === "number" &&
       (user.sessionVersion ?? 0) !== auth.sessionVersion
     ) {
-      return jsonError("Session expired. Please sign in again.", 401);
+      return jsonUnauthorized("Session expired. Please sign in again.");
     }
 
     let ownerDisplayName = user.name || "";

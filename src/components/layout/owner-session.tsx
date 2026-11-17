@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { redirectToLogin } from "@/lib/auth-client";
 
 export type OwnerSession = {
   id: string;
@@ -41,10 +42,15 @@ export function OwnerSessionProvider({
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/me");
+      const response = await fetch("/api/auth/me", {
+        credentials: "same-origin",
+      });
       if (!response.ok) {
         setOwner(null);
         setDisplayName("");
+        if (response.status === 401) {
+          redirectToLogin();
+        }
         return;
       }
       const payload = (await response.json()) as {

@@ -2,12 +2,9 @@
 
 import Link from "next/link";
 import {
-  ClipboardList,
   Package,
   Receipt,
   ShoppingCart,
-  Truck,
-  Users,
   Wallet,
   Warehouse,
   type LucideIcon,
@@ -49,24 +46,6 @@ const QUICK_LINKS: QuickLink[] = [
     icon: Warehouse,
   },
   {
-    href: "/dashboard/customers",
-    label: "Customers",
-    description: "Directory",
-    icon: Users,
-  },
-  {
-    href: "/dashboard/purchases",
-    label: "Purchases",
-    description: "Receive",
-    icon: ClipboardList,
-  },
-  {
-    href: "/dashboard/suppliers",
-    label: "Suppliers",
-    description: "Payables",
-    icon: Truck,
-  },
-  {
     href: "/dashboard/accounts",
     label: "Accounts",
     description: "Cash & expenses",
@@ -87,7 +66,7 @@ export function DashboardQuickAccess() {
           </p>
         </div>
       </div>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible md:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {QUICK_LINKS.map((item) => {
           const Icon = item.icon;
           const primary = item.emphasis === "primary";
@@ -96,7 +75,7 @@ export function DashboardQuickAccess() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex min-w-[11rem] shrink-0 items-center gap-3.5 rounded-2xl border px-4 py-4 transition-all sm:min-w-0",
+                "group flex items-center gap-3.5 rounded-2xl border px-4 py-4 transition-all",
                 primary
                   ? "border-primary/40 bg-primary text-primary-foreground shadow-[var(--shadow-sm)] hover:bg-primary/90"
                   : "border-border bg-card text-foreground hover:border-primary/35 hover:bg-secondary/60",
@@ -113,12 +92,12 @@ export function DashboardQuickAccess() {
                 <Icon className="h-6 w-6" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-base font-semibold leading-tight">
+                <span className="block text-base font-semibold leading-tight">
                   {item.label}
                 </span>
                 <span
                   className={cn(
-                    "block truncate text-sm",
+                    "block text-sm",
                     primary
                       ? "text-primary-foreground/80"
                       : "text-muted-foreground",

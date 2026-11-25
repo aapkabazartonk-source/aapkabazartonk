@@ -56,7 +56,7 @@ export function RevenueChart({
           </span>
         </div>
       </CardHeader>
-      <CardContent className="h-[300px] pt-2">
+      <CardContent className="h-[360px] pt-2 sm:h-[400px]">
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading sales trend…

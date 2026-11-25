@@ -386,7 +386,7 @@ const VIEWS = [
   ["top_qty", "Best selling"],
   ["top_revenue", "Top revenue"],
   ["top_profit", "Most profitable"],
-  ["slow", "Slow moving"],
+  ["slow", "Dead stock"],
   ["no_sales", "No sales"],
 ] as const;
 
@@ -422,12 +422,12 @@ export function ProductPanel({
           </div>
           {(view === "slow") ? (
             <Select value={slowDays} onValueChange={(value) => onSlowDays(value as "30" | "60" | "90")}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="30">30 days</SelectItem>
-                <SelectItem value="60">60 days</SelectItem>
+                <SelectItem value="60">60 days (2 months)</SelectItem>
                 <SelectItem value="90">90 days</SelectItem>
               </SelectContent>
             </Select>
@@ -592,9 +592,16 @@ export function InventoryPanel({ data }: { data: AnalyticsPayloads["inventory"] 
             <ProductList rows={data.fastMoving} empty="No completed sales in this range." />
           </div>
           <div>
-            <p className="mb-2 text-sm font-medium">Slow moving · {data.slowDays} days</p>
-            <p className="mb-2 text-xs text-muted-foreground">In stock with no sales in this window. Not the same as low stock.</p>
-            <ProductList rows={data.slowMoving} empty="No slow-moving products in this window." />
+            <p className="mb-2 text-sm font-medium">
+              Dead stock · {data.slowDays} days
+            </p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              In stock with no sales in this window. Not the same as low stock.
+            </p>
+            <ProductList
+              rows={data.slowMoving}
+              empty="No dead stock products in this window."
+            />
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">

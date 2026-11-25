@@ -69,7 +69,7 @@ export function HeldBillsManager() {
               <div>
                 <p className="font-semibold">{bill.holdNumber}</p>
                 <p className="text-sm text-muted-foreground">
-                  Walk-in customer · {bill.cartItems.length} lines ·{" "}
+                  Walk-in Customer · {bill.cartItems.length} lines ·{" "}
                   {new Date(bill.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
                 </p>
                 <p className="mt-1 text-sm">

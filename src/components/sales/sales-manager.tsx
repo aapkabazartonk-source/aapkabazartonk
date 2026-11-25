@@ -163,7 +163,16 @@ export function SalesManager() {
                       {sale.invoiceType === "TAX_INVOICE" ? "Tax invoice" : "Bill of supply"}
                     </p>
                   </TableCell>
-                  <TableCell>{sale.invoiceSnapshot?.customerName || "Walk-in customer"}</TableCell>
+                  <TableCell>
+                    <p className="font-medium">
+                      {sale.invoiceSnapshot?.customerName || "Walk-in Customer"}
+                    </p>
+                    {sale.invoiceSnapshot?.customerPhone ? (
+                      <p className="text-xs text-muted-foreground">
+                        {sale.invoiceSnapshot.customerPhone}
+                      </p>
+                    ) : null}
+                  </TableCell>
                   <TableCell>{new Date(sale.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</TableCell>
                   <TableCell>{formatCurrency(sale.grandTotal)}</TableCell>
                   <TableCell>{statusBadge(sale.paymentStatus)}</TableCell>

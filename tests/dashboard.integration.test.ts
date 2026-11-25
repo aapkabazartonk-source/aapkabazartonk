@@ -200,6 +200,8 @@ describe("dashboard integration", { concurrency: 1 }, () => {
 
       assert.equal(dashboard.kpis.todaySales.current, 100);
       assert.equal(dashboard.kpis.todayBills.current, 1);
+      assert.equal(dashboard.kpis.todayCashCollected.current, 118);
+      assert.equal(dashboard.kpis.todayOnlineCollected.current, 0);
       assert.equal(dashboard.kpis.averageBill.current, 118);
       assert.equal(dashboard.kpis.lowStockProducts.current, 1);
       assert.equal(dashboard.kpis.inventoryValue.current, 80);

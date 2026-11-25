@@ -362,7 +362,10 @@ export function marginOrNull(grossProfit: number | null, coveredNetSales: number
 export const RETURNS_NOTE =
   "Returns and refunds are not recorded, so they are not deducted.";
 
-export const EXPENSES_NOTE = "Expenses not configured";
+export const EXPENSES_NOTE =
+  "Operating expenses come from Accounts & Expenses (expense date accrual). Staff salaries are recognized once per salary period.";
+
+export const EXPENSES_STATUS_CONFIGURED = "configured" as const;
 
 export const PAYABLES_NOTE =
   "Current supplier balance for the business, including opening balances and advances. Not limited to the selected dates. Positive means payable.";

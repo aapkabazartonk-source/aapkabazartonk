@@ -94,7 +94,7 @@ export function InvoiceDocument({
       </header>
 
       <section className="mt-3 border-t border-dashed border-neutral-400 pt-2 text-[10px]">
-        <p className="font-medium">{snap?.customerName || "Walk-in customer"}</p>
+        <p className="font-medium">{snap?.customerName || "Walk-in Customer"}</p>
         {snap?.customerPhone ? <p>{snap.customerPhone}</p> : null}
         {snap?.customerGstin ? <p>GSTIN {snap.customerGstin}</p> : null}
         {snap?.customerAddress ? <p>{snap.customerAddress}</p> : null}

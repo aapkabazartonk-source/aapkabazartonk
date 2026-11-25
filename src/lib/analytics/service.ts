@@ -5,9 +5,7 @@ import {
 } from "@/lib/constants";
 import {
   AGING_NOTE,
-  COLLECTED_PAYMENT_STATUSES,
   EXPENSES_NOTE,
-  EXPENSES_STATUS,
   INVENTORY_VALUATION_LABEL,
   INVENTORY_VALUATION_METHOD,
   PAYABLES_NOTE,
@@ -17,17 +15,24 @@ import {
   RETURNS_NOTE,
   TURNOVER_NOTE,
   VALUATION_NOTE,
-  catalogInventoryValue,
   compareNumbers,
   costNote,
-  isCollectedPayment,
-  netSupplierBalance,
   profitFromLines,
-  purchaseCostByProduct,
   roundQty,
   type ComparedNumber,
   type ProductProfit,
 } from "@/lib/analytics/finance";
+import {
+  averageBill,
+  loadCosts,
+  loadHeader,
+  loadInventoryValue,
+  loadLines,
+  loadPayables,
+  loadPayments,
+  loadProfit,
+  type AnalyticsScope,
+} from "@/lib/analytics/loaders";
 import type { AnalyticsQuery } from "@/lib/analytics/query";
 import {
   BUSINESS_TIMEZONE,
@@ -40,59 +45,36 @@ import {
 import { roundMoney } from "@/lib/money";
 import { Business } from "@/models/Business";
 import { InventoryLog } from "@/models/InventoryLog";
-import { Payment } from "@/models/Payment";
 import { Product } from "@/models/Product";
 import { Purchase } from "@/models/Purchase";
 import { Sale } from "@/models/Sale";
-import { Supplier } from "@/models/Supplier";
 import { SupplierPayment } from "@/models/SupplierPayment";
 import type {
   AnalyticsMeta,
   AnalyticsProductRow,
   CategoryPoint,
   Pagination,
-  PaymentSlice,
   PurchaseSalesPoint,
   RevenuePoint,
   TrendPoint,
 } from "@/lib/analytics/types";
 
+export type { AnalyticsScope };
+export {
+  averageBill,
+  loadHeader,
+  loadInventoryValue,
+  loadLines,
+  loadPayables,
+  loadPayments,
+  loadProfit,
+};
+
 export const ANALYTICS_EXPORT_ROW_CAP = 5000;
 
 const CHART_COLORS = ["#A3CA69", "#9299C9", "#7EAB3A", "#B8BFD9", "#C5DF8F", "#5F8F86"];
 
-const METHOD_ORDER = ["CASH", "UPI", "CARD", "BANK_TRANSFER"];
-const METHOD_LABEL: Record<string, string> = {
-  CASH: "Cash",
-  UPI: "UPI",
-  CARD: "Card",
-  BANK_TRANSFER: "Bank transfer",
-  CREDIT: "Credit",
-};
-
 const INWARD_MOVEMENTS = ["PURCHASE_RECEIVE", "OPENING_STOCK", "STOCK_IN"] as const;
-
-export type AnalyticsScope = {
-  businessId: Types.ObjectId;
-  storeId: Types.ObjectId;
-};
-
-type HeaderTotals = {
-  revenue: number;
-  netSales: number;
-  gst: number;
-  bills: number;
-  units: number;
-};
-
-type LineGroup = {
-  productId: string;
-  name: string;
-  sku: string;
-  quantity: number;
-  netSales: number;
-  revenue: number;
-};
 
 type ProductDoc = {
   _id: Types.ObjectId;
@@ -123,6 +105,9 @@ function receivedMatch(scope: AnalyticsScope, from: Date, to: Date) {
     receivedAt: { $gte: from, $lt: to },
   };
 }
+
+// Shared loaders live in `@/lib/analytics/loaders` to avoid circular imports
+// with Accounts / Dashboard services.
 
 function dateFormat(grain: AnalyticsGrain) {
   if (grain === "hour") return "%Y-%m-%dT%H";
@@ -169,173 +154,6 @@ function quantityReduce() {
   };
 }
 
-export async function loadHeader(
-  scope: AnalyticsScope,
-  from: Date,
-  to: Date,
-): Promise<HeaderTotals> {
-  const [row] = await Sale.aggregate<{
-    revenue: number;
-    netSales: number;
-    gst: number;
-    bills: number;
-    units: number;
-  }>([
-    { $match: saleMatch(scope, from, to) },
-    {
-      $group: {
-        _id: null,
-        revenue: { $sum: "$grandTotal" },
-        netSales: { $sum: "$taxableAmount" },
-        gst: { $sum: "$totalTax" },
-        bills: { $sum: 1 },
-        units: { $sum: quantityReduce() },
-      },
-    },
-  ]);
-  return {
-    revenue: roundMoney(row?.revenue ?? 0),
-    netSales: roundMoney(row?.netSales ?? 0),
-    gst: roundMoney(row?.gst ?? 0),
-    bills: row?.bills ?? 0,
-    units: roundQty(row?.units ?? 0),
-  };
-}
-
-export async function loadLines(
-  scope: AnalyticsScope,
-  from: Date,
-  to: Date,
-): Promise<LineGroup[]> {
-  const rows = await Sale.aggregate<{
-    _id: Types.ObjectId;
-    name: string;
-    sku: string;
-    quantity: number;
-    netSales: number;
-    revenue: number;
-  }>([
-    { $match: saleMatch(scope, from, to) },
-    { $unwind: "$items" },
-    {
-      $group: {
-        _id: "$items.product",
-        name: { $first: "$items.productName" },
-        sku: { $first: "$items.sku" },
-        quantity: { $sum: "$items.quantity" },
-        netSales: { $sum: "$items.taxableAmount" },
-        revenue: { $sum: "$items.finalAmount" },
-      },
-    },
-  ]);
-  return rows.map((row) => ({
-    productId: String(row._id),
-    name: row.name,
-    sku: row.sku,
-    quantity: roundQty(row.quantity),
-    netSales: roundMoney(row.netSales),
-    revenue: roundMoney(row.revenue),
-  }));
-}
-
-async function loadCosts(scope: AnalyticsScope, until: Date) {
-  const purchases = await Purchase.find({
-    businessId: scope.businessId,
-    storeId: scope.storeId,
-    status: RECEIVED_PURCHASE_STATUS,
-    receivedAt: { $ne: null, $lt: until },
-  })
-    .select("discount items")
-    .lean<
-      Array<{
-        discount?: number;
-        items: Array<{
-          product: Types.ObjectId;
-          quantity: number;
-          purchasePrice: number;
-          discount?: number;
-        }>;
-      }>
-    >();
-
-  return purchaseCostByProduct(
-    purchases.map((purchase) => ({
-      discount: purchase.discount ?? 0,
-      items: purchase.items.map((item) => ({
-        productId: String(item.product),
-        quantity: item.quantity,
-        purchasePrice: item.purchasePrice,
-        lineDiscount: item.discount ?? 0,
-      })),
-    })),
-  );
-}
-
-async function loadProfit(scope: AnalyticsScope, from: Date, to: Date) {
-  const [lines, costs] = await Promise.all([
-    loadLines(scope, from, to),
-    loadCosts(scope, to),
-  ]);
-  return { lines, profit: profitFromLines(lines, costs) };
-}
-
-export async function loadPayments(scope: AnalyticsScope, from: Date, to: Date) {
-  const rows = await Payment.aggregate<{
-    _id: { method: string; status: string };
-    amount: number;
-  }>([
-    {
-      $match: {
-        businessId: scope.businessId,
-        storeId: scope.storeId,
-        createdAt: { $gte: from, $lt: to },
-        status: { $in: [...COLLECTED_PAYMENT_STATUSES, "CREDIT"] },
-      },
-    },
-    {
-      $group: {
-        _id: { method: "$paymentMethod", status: "$status" },
-        amount: { $sum: "$amount" },
-      },
-    },
-  ]);
-
-  const byMethod = new Map<string, number>();
-  let collected = 0;
-  let credit = 0;
-  for (const row of rows) {
-    if (row._id.status === "CREDIT" || row._id.method === "CREDIT") {
-      credit += row.amount;
-      continue;
-    }
-    if (!isCollectedPayment(row._id.status)) continue;
-    collected += row.amount;
-    byMethod.set(row._id.method, (byMethod.get(row._id.method) ?? 0) + row.amount);
-  }
-  const collectedRounded = roundMoney(collected);
-  const methods: PaymentSlice[] = [...byMethod.entries()]
-    .map(([method, amount]) => ({
-      method,
-      label: METHOD_LABEL[method] ?? "Other",
-      amount: roundMoney(amount),
-      percent:
-        collectedRounded === 0
-          ? null
-          : roundMoney((amount / collectedRounded) * 100),
-    }))
-    .sort((a, b) => {
-      const ai = METHOD_ORDER.indexOf(a.method);
-      const bi = METHOD_ORDER.indexOf(b.method);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
-
-  return {
-    collected: collectedRounded,
-    creditOutstanding: roundMoney(credit),
-    methods,
-  };
-}
-
 async function loadPurchaseTotal(scope: AnalyticsScope, from: Date, to: Date) {
   const [row] = await Purchase.aggregate<{
     total: number;
@@ -357,27 +175,6 @@ async function loadPurchaseTotal(scope: AnalyticsScope, from: Date, to: Date) {
     quantity: roundQty(row?.quantity ?? 0),
     count: row?.count ?? 0,
   };
-}
-
-export async function loadInventoryValue(scope: AnalyticsScope) {
-  const products = await Product.find({
-    businessId: scope.businessId,
-    isActive: true,
-  })
-    .select("currentStock purchasePrice isActive")
-    .lean<Array<{ currentStock: number; purchasePrice: number; isActive: boolean }>>();
-  return catalogInventoryValue(products);
-}
-
-export async function loadPayables(scope: AnalyticsScope) {
-  const rows = await Supplier.find({ businessId: scope.businessId })
-    .select("currentBalance")
-    .lean<Array<{ currentBalance?: number }>>();
-  return netSupplierBalance(rows.map((row) => row.currentBalance ?? 0));
-}
-
-export function averageBill(revenue: number, bills: number) {
-  return bills === 0 ? null : roundMoney(revenue / bills);
 }
 
 function profitMetric(current: number | null, previous: number | null) {
@@ -705,12 +502,56 @@ export async function getPayments(scope: AnalyticsScope, query: AnalyticsQuery) 
 }
 
 export async function getProfitLoss(scope: AnalyticsScope, query: AnalyticsQuery) {
-  const [header, current, previous] = await Promise.all([
+  const { sumOperatingExpenses } = await import("@/lib/expense-service");
+  const { sumRecognizedSalaryExpense } = await import(
+    "@/lib/staff-salary-service"
+  );
+  const [
+    header,
+    current,
+    previous,
+    operatingExpenses,
+    previousOperatingExpenses,
+    salaryExpense,
+    previousSalaryExpense,
+  ] = await Promise.all([
     loadHeader(scope, query.range.from, query.range.to),
     loadProfit(scope, query.range.from, query.range.to),
     loadProfit(scope, query.range.previousFrom, query.range.previousTo),
+    sumOperatingExpenses({
+      businessId: scope.businessId,
+      from: query.range.from,
+      to: query.range.to,
+    }),
+    sumOperatingExpenses({
+      businessId: scope.businessId,
+      from: query.range.previousFrom,
+      to: query.range.previousTo,
+    }),
+    sumRecognizedSalaryExpense({
+      businessId: scope.businessId,
+      from: query.range.from,
+      to: query.range.to,
+    }),
+    sumRecognizedSalaryExpense({
+      businessId: scope.businessId,
+      from: query.range.previousFrom,
+      to: query.range.previousTo,
+    }),
   ]);
   const profit = current.profit;
+  const totalOpEx = roundMoney(operatingExpenses + salaryExpense);
+  const previousTotalOpEx = roundMoney(
+    previousOperatingExpenses + previousSalaryExpense,
+  );
+  const operatingProfit =
+    profit.grossProfit === null
+      ? null
+      : roundMoney(profit.grossProfit - totalOpEx);
+  const previousOperatingProfit =
+    previous.profit.grossProfit === null
+      ? null
+      : roundMoney(previous.profit.grossProfit - previousTotalOpEx);
   return {
     ...meta(query),
     revenue: header.revenue,
@@ -727,10 +568,15 @@ export async function getProfitLoss(scope: AnalyticsScope, query: AnalyticsQuery
     costStatus: profit.status,
     costBasis: "estimated_purchase_wac" as const,
     costNote: costNote(profit.status, profit.unitsSold),
-    operatingExpenses: null,
-    expensesStatus: EXPENSES_STATUS,
+    operatingExpenses: compareNumbers(totalOpEx, previousTotalOpEx),
+    staffSalaryExpenses: salaryExpense,
+    otherOperatingExpenses: operatingExpenses,
+    expensesStatus: "configured" as const,
     expensesNote: EXPENSES_NOTE,
+    operatingProfit: compareNumbers(operatingProfit, previousOperatingProfit),
     netProfit: null,
+    netProfitNote:
+      "Income tax, interest and depreciation are not configured, so net profit after those items is not shown.",
     returnsNote: RETURNS_NOTE,
   };
 }
@@ -839,7 +685,7 @@ async function listQuietProducts(scope: AnalyticsScope, query: AnalyticsQuery) {
     },
     note:
       query.view === "slow"
-        ? `In-stock products with no completed sales in the last ${query.slowDays} days. This is not the low-stock alert.`
+        ? `Dead stock: in-stock products with no completed sales in the last ${query.slowDays} days. This is not the low-stock alert.`
         : "Active products with no completed sales in the selected range.",
   };
 }

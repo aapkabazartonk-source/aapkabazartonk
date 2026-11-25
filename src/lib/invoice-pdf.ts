@@ -168,7 +168,7 @@ export async function renderInvoicePdf(sale: InvoicePdfSource) {
   });
   y -= 12;
 
-  draw(snap.customerName || "Walk-in customer", MARGIN, 8, "bold");
+  draw(snap.customerName || "Walk-in Customer", MARGIN, 8, "bold");
   y -= 11;
   if (snap.customerPhone) {
     draw(snap.customerPhone, MARGIN, 7, "regular", muted);

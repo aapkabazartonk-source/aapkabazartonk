@@ -7,9 +7,16 @@ import {
   ClipboardList,
   Receipt,
   ShoppingCart,
+  Users,
   Truck,
   BarChart3,
+  Wallet,
   Settings,
+  Landmark,
+  HandCoins,
+  BookOpen,
+  FileSpreadsheet,
+  UserRound,
 } from "lucide-react";
 
 export interface NavItem {
@@ -17,11 +24,12 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   description: string;
+  children?: NavItem[];
 }
 
 export const DASHBOARD_NAV: NavItem[] = [
   {
-    title: "Overview",
+    title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
     description: "Business performance at a glance",
@@ -63,10 +71,54 @@ export const DASHBOARD_NAV: NavItem[] = [
     description: "Sales history and invoices",
   },
   {
+    title: "Customers",
+    href: "/dashboard/customers",
+    icon: Users,
+    description: "Customer directory and purchase history",
+  },
+  {
     title: "Suppliers",
     href: "/dashboard/suppliers",
     icon: Truck,
     description: "Suppliers, payables, and ledgers",
+  },
+  {
+    title: "Accounts & Expenses",
+    href: "/dashboard/accounts",
+    icon: Wallet,
+    description: "Cashbook, expenses, salaries, and profit",
+    children: [
+      {
+        title: "Financial Overview",
+        href: "/dashboard/accounts",
+        icon: Landmark,
+        description: "Revenue, profit, and balances",
+      },
+      {
+        title: "Expenses",
+        href: "/dashboard/accounts/expenses",
+        icon: HandCoins,
+        description: "Operating expenses and payments",
+      },
+      {
+        title: "Staff & Salaries",
+        href: "/dashboard/accounts/staff",
+        icon: UserRound,
+        description: "Staff directory and salary payments",
+      },
+      {
+        title: "Accounts & Cashbook",
+        href: "/dashboard/accounts/cashbook",
+        icon: BookOpen,
+        description: "Cash, bank, and fund movements",
+      },
+      {
+        title: "Profit & Loss",
+        href: "/dashboard/accounts/profit-loss",
+        icon: FileSpreadsheet,
+        description: "P&L statement for the period",
+      },
+    ],
   },
   {
     title: "Analytics",
@@ -86,7 +138,21 @@ export function getNavItem(pathname: string): NavItem | undefined {
   if (pathname === "/dashboard") {
     return DASHBOARD_NAV[0];
   }
-  return DASHBOARD_NAV.find(
-    (item) => item.href !== "/dashboard" && pathname.startsWith(item.href),
-  );
+
+  for (const item of DASHBOARD_NAV) {
+    if (item.children?.length) {
+      const child = [...item.children]
+        .sort((a, b) => b.href.length - a.href.length)
+        .find((entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`));
+      if (child) return child;
+      if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
+        return item;
+      }
+      continue;
+    }
+    if (item.href !== "/dashboard" && pathname.startsWith(item.href)) {
+      return item;
+    }
+  }
+  return undefined;
 }

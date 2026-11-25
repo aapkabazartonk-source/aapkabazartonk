@@ -34,9 +34,42 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
             <span>Aapka Bazar</span>
           </SheetTitle>
         </SheetHeader>
-        <nav className="space-y-1 px-3 py-4">
+        <nav className="space-y-1 overflow-y-auto px-3 py-4">
           {DASHBOARD_NAV.map((item) => {
             const Icon = item.icon;
+            if (item.children?.length) {
+              return (
+                <div key={item.href} className="space-y-1 pt-2">
+                  <p className="px-3.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {item.title}
+                  </p>
+                  {item.children.map((child) => {
+                    const ChildIcon = child.icon;
+                    const active =
+                      pathname === child.href ||
+                      (child.href !== item.href &&
+                        pathname.startsWith(`${child.href}/`));
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={() => onOpenChange(false)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-full px-3.5 py-2.5 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "text-foreground/80 hover:bg-sidebar-muted hover:text-foreground",
+                        )}
+                      >
+                        <ChildIcon className="h-[18px] w-[18px]" />
+                        {child.title}
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             const active =
               item.href === "/dashboard"
                 ? pathname === "/dashboard"

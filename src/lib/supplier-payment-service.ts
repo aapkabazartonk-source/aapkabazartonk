@@ -1,4 +1,5 @@
 import { Types, type ClientSession } from "mongoose";
+import { postSupplierPaymentToLedger } from "@/lib/account-ledger";
 import { nextDailySequence } from "@/lib/document-numbers";
 import {
   duplicateKeyPattern,
@@ -244,6 +245,15 @@ export async function recordSupplierPayment(params: {
           },
           session,
         );
+
+        await postSupplierPaymentToLedger({
+          scope,
+          session,
+          supplierPaymentId: payment._id,
+          paymentNumber,
+          amount,
+          paymentMethod: data.paymentMethod,
+        });
 
         return payment;
       });

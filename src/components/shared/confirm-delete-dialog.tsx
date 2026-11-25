@@ -17,6 +17,10 @@ interface ConfirmDeleteDialogProps {
   title: string;
   description: string;
   confirming?: boolean;
+  /** Defaults to "Delete". */
+  confirmLabel?: string;
+  /** Defaults to "Deleting…". */
+  confirmingLabel?: string;
   onConfirm: () => void;
 }
 
@@ -26,6 +30,8 @@ export function ConfirmDeleteDialog({
   title,
   description,
   confirming = false,
+  confirmLabel = "Delete",
+  confirmingLabel = "Deleting…",
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   return (
@@ -45,7 +51,7 @@ export function ConfirmDeleteDialog({
               onConfirm();
             }}
           >
-            {confirming ? "Deleting…" : "Delete"}
+            {confirming ? confirmingLabel : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

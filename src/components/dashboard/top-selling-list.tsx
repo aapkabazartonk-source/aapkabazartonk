@@ -46,11 +46,11 @@ export function TopSellingList({
             <Link
               key={item.id}
               href={item.href}
-              className="flex items-center gap-3 rounded-2xl border border-border bg-background px-3.5 py-3 transition-colors hover:bg-muted/40"
+              className="flex items-center gap-3.5 rounded-2xl border border-border bg-background px-4 py-3.5 transition-colors hover:bg-muted/40"
             >
               <div
                 className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base font-semibold",
                   index % 2 === 0
                     ? "bg-success-soft text-foreground"
                     : "bg-purple-soft text-purple",
@@ -59,15 +59,15 @@ export function TopSellingList({
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{item.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-base font-medium">{item.name}</p>
+                <p className="truncate text-sm text-muted-foreground">
                   {item.category ? `${item.category} · ` : null}
                   <span className="font-mono">{item.sku}</span>
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-medium">{formatNumber(item.unitsSold)}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-base font-medium">{formatNumber(item.unitsSold)}</p>
+                <p className="text-sm text-muted-foreground">
                   {formatCurrency(item.revenue)}
                 </p>
               </div>

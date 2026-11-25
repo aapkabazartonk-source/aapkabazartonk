@@ -17,8 +17,12 @@ import {
   loadLines,
   loadPayables,
   loadPayments,
+  loadProfit,
   type AnalyticsScope,
-} from "@/lib/analytics/service";
+} from "@/lib/analytics/loaders";
+import { accountBalances } from "@/lib/accounts-service";
+import { sumOperatingExpenses } from "@/lib/expense-service";
+import { sumRecognizedSalaryExpense } from "@/lib/staff-salary-service";
 import {
   BUSINESS_TIMEZONE,
   bucketLabel,
@@ -28,6 +32,7 @@ import {
   type AnalyticsGrain,
 } from "@/lib/analytics/time";
 import { roundMoney } from "@/lib/money";
+import { getCustomerDashboardStats } from "@/lib/customer-service";
 import { Payment } from "@/models/Payment";
 import { Product } from "@/models/Product";
 import { Purchase } from "@/models/Purchase";
@@ -48,8 +53,25 @@ const METHOD_LABEL: Record<string, string> = {
   CREDIT: "Credit",
 };
 
+const ONLINE_PAYMENT_METHODS = new Set(["UPI", "CARD", "BANK_TRANSFER"]);
+
 const LIST_LIMIT = 8;
 const TOP_PRODUCTS_LIMIT = 5;
+
+function cashAndOnlineCollected(
+  payments: Awaited<ReturnType<typeof loadPayments>>,
+) {
+  let cash = 0;
+  let online = 0;
+  for (const method of payments.methods) {
+    if (method.method === "CASH") {
+      cash += method.amount;
+    } else if (ONLINE_PAYMENT_METHODS.has(method.method)) {
+      online += method.amount;
+    }
+  }
+  return { cash: roundMoney(cash), online: roundMoney(online) };
+}
 
 export class DashboardError extends Error {
   status: number;
@@ -350,6 +372,8 @@ export async function getDashboardOverview(
   const [
     todayHeader,
     yesterdayHeader,
+    todayPayments,
+    yesterdayPayments,
     rangeHeader,
     previousRangeHeader,
     rangePayments,
@@ -361,9 +385,19 @@ export async function getDashboardOverview(
     recentSales,
     recentPurchases,
     topProducts,
+    customerStats,
+    currentProfit,
+    previousProfit,
+    operatingExpenses,
+    previousOperatingExpenses,
+    salaryExpense,
+    previousSalaryExpense,
+    balances,
   ] = await Promise.all([
     loadHeader(scope, today.from, today.to),
     loadHeader(scope, today.previousFrom, today.previousTo),
+    loadPayments(scope, today.from, today.to),
+    loadPayments(scope, today.previousFrom, today.previousTo),
     loadHeader(scope, range.from, range.to),
     loadHeader(scope, range.previousFrom, range.previousTo),
     loadPayments(scope, range.from, range.to),
@@ -375,6 +409,30 @@ export async function getDashboardOverview(
     loadRecentSales(scope),
     loadRecentPurchases(scope),
     loadTopProducts(scope, range.from, range.to),
+    getCustomerDashboardStats(scope.businessId),
+    loadProfit(scope, range.from, range.to),
+    loadProfit(scope, range.previousFrom, range.previousTo),
+    sumOperatingExpenses({
+      businessId: scope.businessId,
+      from: range.from,
+      to: range.to,
+    }),
+    sumOperatingExpenses({
+      businessId: scope.businessId,
+      from: range.previousFrom,
+      to: range.previousTo,
+    }),
+    sumRecognizedSalaryExpense({
+      businessId: scope.businessId,
+      from: range.from,
+      to: range.to,
+    }),
+    sumRecognizedSalaryExpense({
+      businessId: scope.businessId,
+      from: range.previousFrom,
+      to: range.previousTo,
+    }),
+    accountBalances(scope.businessId),
   ]);
 
   const todayAvg = averageBill(todayHeader.revenue, todayHeader.bills);
@@ -382,6 +440,21 @@ export async function getDashboardOverview(
     yesterdayHeader.revenue,
     yesterdayHeader.bills,
   );
+  const todayCollected = cashAndOnlineCollected(todayPayments);
+  const yesterdayCollected = cashAndOnlineCollected(yesterdayPayments);
+
+  const totalOpEx = roundMoney(operatingExpenses + salaryExpense);
+  const previousTotalOpEx = roundMoney(
+    previousOperatingExpenses + previousSalaryExpense,
+  );
+  const grossProfit = currentProfit.profit.grossProfit;
+  const previousGross = previousProfit.profit.grossProfit;
+  const operatingProfit =
+    grossProfit === null ? null : roundMoney(grossProfit - totalOpEx);
+  const previousOperatingProfit =
+    previousGross === null
+      ? null
+      : roundMoney(previousGross - previousTotalOpEx);
 
   return {
     generatedAt: now.toISOString(),
@@ -401,18 +474,40 @@ export async function getDashboardOverview(
     kpis: {
       todaySales: compareNumbers(todayHeader.netSales, yesterdayHeader.netSales),
       todayBills: compareNumbers(todayHeader.bills, yesterdayHeader.bills),
+      todayCashCollected: compareNumbers(
+        todayCollected.cash,
+        yesterdayCollected.cash,
+      ),
+      todayOnlineCollected: compareNumbers(
+        todayCollected.online,
+        yesterdayCollected.online,
+      ),
       averageBill: compareNumbers(todayAvg, yesterdayAvg),
       lowStockProducts: snapshotMetric(lowStock.count),
       inventoryValue: snapshotMetric(inventoryValue),
       supplierPayables: snapshotMetric(payables),
+      totalCustomers: snapshotMetric(customerStats.totalCustomers),
+      newCustomersThisMonth: snapshotMetric(customerStats.newCustomersThisMonth),
+    },
+    finance: {
+      revenue: compareNumbers(rangeHeader.netSales, previousRangeHeader.netSales),
+      grossProfit: compareNumbers(grossProfit, previousGross),
+      operatingExpenses: compareNumbers(totalOpEx, previousTotalOpEx),
+      operatingProfit: compareNumbers(operatingProfit, previousOperatingProfit),
+      cashAndBank: snapshotMetric(balances.total),
     },
     kpiLinks: {
       todaySales: "/dashboard/sales",
       todayBills: "/dashboard/sales",
+      todayCashCollected: "/dashboard/analytics",
+      todayOnlineCollected: "/dashboard/analytics",
       averageBill: "/dashboard/analytics",
       lowStockProducts: "/dashboard/inventory/alerts",
       inventoryValue: "/dashboard/inventory",
       supplierPayables: "/dashboard/suppliers",
+      totalCustomers: "/dashboard/customers",
+      newCustomersThisMonth: "/dashboard/customers",
+      finance: "/dashboard/accounts",
     },
     salesTrend: {
       grain,

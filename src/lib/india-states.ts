@@ -58,3 +58,10 @@ export function stateCodeFromGstin(gstin: string) {
   if (!GSTIN_REGEX.test(normalized)) return "";
   return normalized.slice(0, 2);
 }
+
+export function stateCodeFromName(name: string | null | undefined) {
+  const needle = (name ?? "").trim().toLowerCase();
+  if (!needle) return "";
+  const match = INDIAN_STATES.find((state) => state.name.toLowerCase() === needle);
+  return match?.code ?? "";
+}

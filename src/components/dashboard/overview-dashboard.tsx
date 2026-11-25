@@ -2,6 +2,7 @@
 
 import { useEffect, useEffectEvent, useState } from "react";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { DashboardQuickAccess } from "@/components/dashboard/dashboard-quick-access";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
 import { RevenueChart } from "@/components/dashboard/charts/revenue-chart";
@@ -71,9 +72,9 @@ function countStat(
 
 function KpiSkeletonGrid() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className="h-[124px] w-full" />
+    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <Skeleton key={index} className="h-[148px] w-full" />
       ))}
     </div>
   );
@@ -134,6 +135,20 @@ export function OverviewDashboard() {
             data.kpiLinks.todayBills,
           ),
           moneyStat(
+            "today-cash",
+            "Cash Collected Today",
+            data.kpis.todayCashCollected,
+            "Confirmed cash payments vs yesterday",
+            data.kpiLinks.todayCashCollected,
+          ),
+          moneyStat(
+            "today-online",
+            "Online Collected Today",
+            data.kpis.todayOnlineCollected,
+            "UPI + Card + Bank vs yesterday",
+            data.kpiLinks.todayOnlineCollected,
+          ),
+          moneyStat(
             "average-bill",
             "Average Bill Value",
             data.kpis.averageBill,
@@ -163,12 +178,67 @@ export function OverviewDashboard() {
             "Outstanding payable balance",
             data.kpiLinks.supplierPayables,
           ),
+          countStat(
+            "total-customers",
+            "Total Customers",
+            data.kpis.totalCustomers,
+            "Active customers in directory",
+            data.kpiLinks.totalCustomers,
+          ),
+          countStat(
+            "new-customers",
+            "New Customers This Month",
+            data.kpis.newCustomersThisMonth,
+            "Added in the current calendar month",
+            data.kpiLinks.newCustomersThisMonth,
+          ),
+        ];
+
+  const financeStats =
+    data == null
+      ? []
+      : [
+          moneyStat(
+            "finance-revenue",
+            "Revenue",
+            data.finance.revenue,
+            data.range.label,
+            data.kpiLinks.finance,
+          ),
+          moneyStat(
+            "finance-gross",
+            "Gross Profit",
+            data.finance.grossProfit,
+            "Sales less estimated COGS",
+            data.kpiLinks.finance,
+          ),
+          moneyStat(
+            "finance-opex",
+            "Operating Expenses",
+            data.finance.operatingExpenses,
+            "Expenses and salaries",
+            data.kpiLinks.finance,
+          ),
+          moneyStat(
+            "finance-op-profit",
+            "Operating Profit",
+            data.finance.operatingProfit,
+            "Gross profit less expenses",
+            data.kpiLinks.finance,
+          ),
+          moneyStat(
+            "finance-cash",
+            "Cash & Bank",
+            data.finance.cashAndBank,
+            "Funds on hand, not profit",
+            data.kpiLinks.finance,
+          ),
         ];
 
   return (
     <div>
       <PageHeader
-        title="Overview"
+        title="Dashboard"
         description="Monitor inventory health, revenue, and store activity from one place."
         actions={
           <DateRangeSelector
@@ -178,6 +248,8 @@ export function OverviewDashboard() {
           />
         }
       />
+
+      <DashboardQuickAccess />
 
       {forbidden ? (
         <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -201,14 +273,40 @@ export function OverviewDashboard() {
       {loading && !data ? (
         <KpiSkeletonGrid />
       ) : data ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
           {stats.map((stat, index) => (
-            <StatCard key={stat.id} stat={stat} index={index} mono />
+            <StatCard key={stat.id} stat={stat} index={index} mono size="lg" />
           ))}
         </div>
       ) : null}
 
-      <div className="mt-6">
+      {loading && !data ? (
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-[148px] w-full" />
+          ))}
+        </div>
+      ) : data ? (
+        <div className="mt-8">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-foreground sm:text-lg">
+                Accounts snapshot
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Open Accounts &amp; Expenses for the full cashbook and P&amp;L.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {financeStats.map((stat, index) => (
+              <StatCard key={stat.id} stat={stat} index={index} mono size="lg" />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-8">
         <RevenueChart
           data={data?.salesTrend.points ?? []}
           rangeLabel={data?.range.label}
@@ -216,7 +314,7 @@ export function OverviewDashboard() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-8 grid gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <RecentTransactions
             data={data?.recentSales ?? []}
@@ -229,7 +327,7 @@ export function OverviewDashboard() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <RecentPurchases
           data={data?.recentPurchases ?? []}
           loading={loading && !data}

@@ -76,18 +76,34 @@ export type DashboardOverviewResponse = {
   kpis: {
     todaySales: ComparedNumber;
     todayBills: ComparedNumber;
+    todayCashCollected: ComparedNumber;
+    todayOnlineCollected: ComparedNumber;
     averageBill: ComparedNumber;
     lowStockProducts: ComparedNumber;
     inventoryValue: ComparedNumber;
     supplierPayables: ComparedNumber;
+    totalCustomers: ComparedNumber;
+    newCustomersThisMonth: ComparedNumber;
+  };
+  finance: {
+    revenue: ComparedNumber;
+    grossProfit: ComparedNumber;
+    operatingExpenses: ComparedNumber;
+    operatingProfit: ComparedNumber;
+    cashAndBank: ComparedNumber;
   };
   kpiLinks: {
     todaySales: string;
     todayBills: string;
+    todayCashCollected: string;
+    todayOnlineCollected: string;
     averageBill: string;
     lowStockProducts: string;
     inventoryValue: string;
     supplierPayables: string;
+    totalCustomers: string;
+    newCustomersThisMonth: string;
+    finance: string;
   };
   salesTrend: {
     grain: string;

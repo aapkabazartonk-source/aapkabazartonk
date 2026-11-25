@@ -519,7 +519,7 @@ describe("analytics integration", { concurrency: 1 }, () => {
       assert.equal(profit.grossProfit.current, 120);
       assert.equal(profit.grossMargin.current, 60);
       assert.equal(profit.netProfit, null);
-      assert.equal(profit.expensesStatus, "not_configured");
+      assert.equal(profit.expensesStatus, "configured");
       assert.equal(profit.uncoveredNetSales, 50);
       assert.equal(purchases.supplierPaymentsTotal, 75);
       assert.equal(overview.kpis.revenue.percent, null);

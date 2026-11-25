@@ -15,7 +15,9 @@
     "test:suppliers": "tsx --test tests/supplier-ledger.test.ts tests/supplier.integration.test.ts",
     "test:settings": "tsx --test tests/settings.integration.test.ts tests/permissions.test.ts",
     "test:analytics": "tsx --test tests/analytics.test.ts tests/analytics.integration.test.ts",
-    "test:dashboard": "tsx --test tests/dashboard.test.ts tests/dashboard.integration.test.ts"
+    "test:dashboard": "tsx --test tests/dashboard.test.ts tests/dashboard.integration.test.ts",
+    "test:customers": "tsx --test tests/customer.integration.test.ts",
+    "test:accounts": "tsx --test tests/accounts.integration.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.1",

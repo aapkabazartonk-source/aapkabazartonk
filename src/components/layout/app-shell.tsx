@@ -30,7 +30,7 @@ export function AppShell({ children }: AppShellProps) {
           <Topbar onMenuClick={() => setMobileOpen(true)} />
 
           <main className="flex-1 overflow-y-auto bg-background">
-            <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto w-full max-w-[1680px] p-4 sm:p-6 lg:p-8 xl:p-10">
               {children}
             </div>
           </main>

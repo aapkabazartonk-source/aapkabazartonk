@@ -67,10 +67,10 @@ export function RecentTransactions({
                 <TableRow key={sale.id} className="cursor-pointer">
                   <TableCell>
                     <Link href={sale.href} className="block min-w-0">
-                      <div className="font-mono text-sm font-medium">
+                      <div className="font-mono text-base font-medium">
                         {sale.invoiceNumber}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-sm text-muted-foreground">
                         {formatTime(sale.createdAt)}
                       </div>
                     </Link>
@@ -78,7 +78,7 @@ export function RecentTransactions({
                   <TableCell className="hidden md:table-cell">
                     <Link href={sale.href}>{sale.paymentMethod}</Link>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right text-base font-semibold">
                     <Link href={sale.href}>{formatCurrency(sale.grandTotal)}</Link>
                   </TableCell>
                 </TableRow>

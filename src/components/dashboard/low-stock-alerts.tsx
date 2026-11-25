@@ -45,19 +45,19 @@ export function LowStockAlerts({ data, loading = false }: LowStockAlertsProps) {
               key={item.id}
               href={item.href}
               className={cn(
-                "flex items-center justify-between gap-3 rounded-2xl border border-border px-3.5 py-3 transition-colors hover:bg-muted/40",
+                "flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3.5 transition-colors hover:bg-muted/40",
                 index % 2 === 0 ? "bg-success-soft/40" : "bg-purple-soft/70",
               )}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{item.name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{item.sku}</p>
+                <p className="truncate text-base font-medium">{item.name}</p>
+                <p className="font-mono text-sm text-muted-foreground">{item.sku}</p>
               </div>
               <div className="text-right">
                 <Badge variant={item.currentStock <= 0 ? "destructive" : "warning"}>
                   {item.currentStock} left
                 </Badge>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Min {item.minStockLevel}
                 </p>
               </div>

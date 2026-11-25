@@ -93,7 +93,7 @@ export function AnalyticsDashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [grain, setGrain] = useState("auto");
-  const [slowDays, setSlowDays] = useState<"30" | "60" | "90">("30");
+  const [slowDays, setSlowDays] = useState<"30" | "60" | "90">("60");
   const [view, setView] = useState("top_revenue");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AnalyticsPayloads | null>(null);

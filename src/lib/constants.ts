@@ -160,6 +160,11 @@ export const SALE_STATUSES = ["COMPLETED"] as const;
 
 export type SaleStatus = (typeof SALE_STATUSES)[number];
 
+export const CUSTOMER_TYPES = ["INDIVIDUAL", "BUSINESS"] as const;
+
+export type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
+
 export const INVOICE_TYPES = ["TAX_INVOICE", "BILL_OF_SUPPLY"] as const;
 
 export type InvoiceType = (typeof INVOICE_TYPES)[number];
@@ -205,3 +210,96 @@ export const BUSINESS_TYPES = [
 ] as const;
 
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
+
+/** Cashbook / ledger account kinds. */
+export const FINANCIAL_ACCOUNT_TYPES = ["CASH", "BANK", "UPI"] as const;
+
+export type FinancialAccountType = (typeof FINANCIAL_ACCOUNT_TYPES)[number];
+
+/**
+ * Immutable account ledger entry types.
+ * Debit increases account balance; credit decreases it (asset cashbook convention).
+ */
+export const ACCOUNT_TRANSACTION_TYPES = [
+  "OPENING",
+  "SALE_COLLECTION",
+  "SUPPLIER_PAYMENT",
+  "EXPENSE_PAYMENT",
+  "SALARY_PAYMENT",
+  "OWNER_WITHDRAWAL",
+  "DEPOSIT",
+  "WITHDRAWAL",
+  "TRANSFER_IN",
+  "TRANSFER_OUT",
+  "REVERSAL",
+] as const;
+
+export type AccountTransactionType = (typeof ACCOUNT_TRANSACTION_TYPES)[number];
+
+export const ACCOUNT_TRANSACTION_REFERENCE_TYPES = [
+  "PAYMENT",
+  "SUPPLIER_PAYMENT",
+  "EXPENSE",
+  "EXPENSE_PAYMENT",
+  "SALARY_RECORD",
+  "SALARY_PAYMENT",
+  "OWNER_WITHDRAWAL",
+  "TRANSFER",
+  "MANUAL",
+  "ACCOUNT",
+] as const;
+
+export type AccountTransactionReferenceType =
+  (typeof ACCOUNT_TRANSACTION_REFERENCE_TYPES)[number];
+
+export const EXPENSE_PAYMENT_STATUSES = [
+  "PAID",
+  "PARTIAL",
+  "PENDING",
+] as const;
+
+export type ExpensePaymentStatus = (typeof EXPENSE_PAYMENT_STATUSES)[number];
+
+export const EXPENSE_PAYMENT_METHODS = [
+  "CASH",
+  "UPI",
+  "BANK_TRANSFER",
+  "CARD",
+  "OTHER",
+] as const;
+
+export type ExpensePaymentMethod = (typeof EXPENSE_PAYMENT_METHODS)[number];
+
+export const DEFAULT_EXPENSE_CATEGORY_NAMES = [
+  "Rent",
+  "Electricity",
+  "Water",
+  "Internet & Telephone",
+  "Staff Welfare",
+  "Transportation",
+  "Maintenance & Repairs",
+  "Packaging",
+  "Marketing",
+  "Office Supplies",
+  "Travel",
+  "Professional Fees",
+  "Bank Charges",
+  "Insurance",
+  "Miscellaneous",
+] as const;
+
+export const SALARY_PAYMENT_METHODS = [
+  "CASH",
+  "UPI",
+  "BANK_TRANSFER",
+] as const;
+
+export type SalaryPaymentMethod = (typeof SALARY_PAYMENT_METHODS)[number];
+
+export const SALARY_RECORD_STATUSES = [
+  "UNPAID",
+  "PARTIAL",
+  "PAID",
+] as const;
+
+export type SalaryRecordStatus = (typeof SALARY_RECORD_STATUSES)[number];

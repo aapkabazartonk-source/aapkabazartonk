@@ -111,7 +111,7 @@ export function parseAnalyticsQuery(
     );
   }
 
-  const slowDays = Number(parsed.slowDays ?? "30") as 30 | 60 | 90;
+  const slowDays = Number(parsed.slowDays ?? "60") as 30 | 60 | 90;
 
   return {
     preset,

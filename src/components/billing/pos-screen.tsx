@@ -19,6 +19,10 @@ import {
   type TenderDraft,
 } from "@/components/billing/checkout-dialog";
 import { InvoiceDocument } from "@/components/billing/invoice-document";
+import {
+  PosCustomerPicker,
+  type PosSelectedCustomer,
+} from "@/components/billing/pos-customer-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -95,6 +99,8 @@ export function PosScreen() {
   const [billDiscount, setBillDiscount] = useState("0");
   const [notes, setNotes] = useState("");
   const [heldCartId, setHeldCartId] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<PosSelectedCustomer | null>(null);
   const [quote, setQuote] = useState<SaleQuote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [quoting, setQuoting] = useState(false);
@@ -208,6 +214,7 @@ export function PosScreen() {
         const response = await fetchJson<{
           data: {
             heldCartId: string;
+            customerId: string | null;
             billDiscount: number;
             notes: string;
             items: Array<{
@@ -263,6 +270,26 @@ export function PosScreen() {
         setBillDiscount(String(response.data.billDiscount ?? 0));
         setNotes(response.data.notes ?? "");
         setSelectedId(next[0]?.productId ?? null);
+        if (response.data.customerId) {
+          try {
+            const customerResponse = await fetchJson<{
+              data: { _id: string; name: string; phone: string; isActive?: boolean };
+            }>(`/api/customers/${response.data.customerId}`);
+            if (customerResponse.data.isActive !== false) {
+              setSelectedCustomer({
+                _id: customerResponse.data._id,
+                name: customerResponse.data.name,
+                phone: customerResponse.data.phone,
+              });
+            } else {
+              setSelectedCustomer(null);
+            }
+          } catch {
+            setSelectedCustomer(null);
+          }
+        } else {
+          setSelectedCustomer(null);
+        }
         router.replace("/dashboard/billing");
         toast.success("Held bill loaded. Prices will be recalculated at checkout.");
       } catch (error) {
@@ -288,7 +315,7 @@ export function PosScreen() {
           discount: Number(line.discount) || 0,
         })),
         billDiscount: billDiscountNumber,
-        customerId: null,
+        customerId: selectedCustomer?._id ?? null,
         notes,
         payments: checkoutOpen ? draftsToPayments(payments) : [],
         allowCredit: checkoutOpen ? allowCredit : true,
@@ -317,7 +344,7 @@ export function PosScreen() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [cart, billDiscountNumber, notes, payments, allowCredit, checkoutOpen]);
+  }, [cart, billDiscountNumber, notes, payments, allowCredit, checkoutOpen, selectedCustomer]);
 
   const clearCart = useCallback(() => {
     setCart([]);
@@ -325,6 +352,7 @@ export function PosScreen() {
     setBillDiscount("0");
     setNotes("");
     setHeldCartId(null);
+    setSelectedCustomer(null);
     setQuote(null);
     setQuoteError("");
   }, []);
@@ -341,7 +369,7 @@ export function PosScreen() {
             discount: Number(line.discount) || 0,
           })),
           billDiscount: billDiscountNumber,
-          customerId: null,
+          customerId: selectedCustomer?._id ?? null,
           notes,
           heldCartId,
         }),
@@ -351,7 +379,7 @@ export function PosScreen() {
     } catch (error) {
       toast.error(error instanceof ApiClientError ? error.message : "Could not hold this bill.");
     }
-  }, [cart, checkoutOpen, billDiscountNumber, notes, heldCartId, clearCart]);
+  }, [cart, checkoutOpen, billDiscountNumber, notes, heldCartId, clearCart, selectedCustomer]);
 
   const openCheckout = useCallback(() => {
     if (cart.length === 0 || quoteError) return;
@@ -415,7 +443,7 @@ export function PosScreen() {
         body: JSON.stringify({
           idempotencyKey: idempotencyKey.current,
           heldCartId,
-          customerId: null,
+          customerId: selectedCustomer?._id ?? null,
           notes,
           billDiscount: billDiscountNumber,
           allowCredit,
@@ -576,9 +604,10 @@ export function PosScreen() {
           </div>
 
           <div className="border-b border-border px-4 pb-3">
-            <p className="rounded-xl bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-              Walk-in customer
-            </p>
+            <PosCustomerPicker
+              selected={selectedCustomer}
+              onSelect={setSelectedCustomer}
+            />
           </div>
 
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">

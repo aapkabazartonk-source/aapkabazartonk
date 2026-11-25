@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, ChevronRight, Store } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Store } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,9 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
   const pathname = usePathname();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    "/dashboard/accounts": true,
+  });
 
   return (
     <aside
@@ -46,10 +50,76 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
         {DASHBOARD_NAV.map((item) => {
           const Icon = item.icon;
-          const active =
-            item.href === "/dashboard"
+          const hasChildren = Boolean(item.children?.length);
+          const childActive = item.children?.some(
+            (child) =>
+              pathname === child.href || pathname.startsWith(`${child.href}/`),
+          );
+          const active = hasChildren
+            ? Boolean(childActive) || pathname === item.href
+            : item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
+          const expanded = openGroups[item.href] ?? active;
+
+          if (hasChildren && !collapsed) {
+            return (
+              <div key={item.href} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenGroups((current) => ({
+                      ...current,
+                      [item.href]: !expanded,
+                    }))
+                  }
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-full px-3.5 py-2.5 text-sm font-medium transition-all duration-200",
+                    active
+                      ? "bg-primary/15 text-foreground"
+                      : "text-foreground/80 hover:bg-sidebar-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {item.title}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-transform",
+                      expanded && "rotate-180",
+                    )}
+                  />
+                </button>
+                {expanded ? (
+                  <div className="ml-4 space-y-1 border-l border-sidebar-border pl-2">
+                    {item.children?.map((child) => {
+                      const ChildIcon = child.icon;
+                      const childIsActive =
+                        pathname === child.href ||
+                        (child.href !== item.href &&
+                          pathname.startsWith(`${child.href}/`));
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-full px-3 py-2 text-sm font-medium transition-colors",
+                            childIsActive
+                              ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
+                              : "text-foreground/75 hover:bg-sidebar-muted hover:text-foreground",
+                          )}
+                        >
+                          <ChildIcon className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{child.title}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
 
           return (
             <Link

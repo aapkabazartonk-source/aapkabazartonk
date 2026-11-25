@@ -136,7 +136,7 @@ const InvoiceSnapshotSchema = new Schema<IInvoiceSnapshot>(
     storeName: { type: String, default: "", trim: true },
     storeCode: { type: String, default: "", trim: true },
     pricesIncludeGst: { type: Boolean, default: false },
-    customerName: { type: String, default: "Walk-in customer", trim: true },
+    customerName: { type: String, default: "Walk-in Customer", trim: true },
     customerPhone: { type: String, default: "", trim: true },
     customerGstin: { type: String, default: "", trim: true, uppercase: true },
     customerAddress: { type: String, default: "", trim: true },

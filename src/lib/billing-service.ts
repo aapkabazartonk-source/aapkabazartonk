@@ -31,6 +31,7 @@ import type {
   QuoteValues,
 } from "@/lib/validators/billing";
 import type { UserRole } from "@/lib/constants";
+import { postSaleCollections } from "@/lib/account-ledger";
 import { Business } from "@/models/Business";
 import { Customer } from "@/models/Customer";
 import { HeldCart } from "@/models/HeldCart";
@@ -278,7 +279,7 @@ function buildSnapshot(params: {
     storeName: store.name,
     storeCode: store.code,
     pricesIncludeGst: Boolean(business.pricesIncludeGst),
-    customerName: customer?.name?.trim() || "Walk-in customer",
+    customerName: customer?.name?.trim() || "Walk-in Customer",
     customerPhone: customer?.phone ?? "",
     customerGstin: (customer?.gstin ?? "").trim().toUpperCase(),
     customerAddress: customer?.address ?? "",
@@ -666,8 +667,15 @@ export async function checkoutSale(params: {
         });
       }
 
+      let createdPayments: Array<{
+        _id: Types.ObjectId;
+        paymentMethod: string;
+        amount: number;
+        status: string;
+        sequence: number;
+      }> = [];
       if (settlement.payments.length > 0) {
-        await Payment.create(
+        createdPayments = await Payment.create(
           settlement.payments.map((payment, index) => ({
             businessId: scope.businessId,
             storeId: scope.storeId,
@@ -684,6 +692,25 @@ export async function checkoutSale(params: {
           })),
           { session, ordered: true },
         );
+      }
+
+      try {
+        await postSaleCollections({
+          scope,
+          session,
+          saleId: sale._id,
+          saleNumber: sale.saleNumber,
+          payments: createdPayments.map((payment) => ({
+            _id: payment._id,
+            paymentMethod: payment.paymentMethod,
+            amount: payment.amount,
+            status: payment.status,
+            sequence: payment.sequence,
+          })),
+        });
+      } catch (ledgerError) {
+        // Cashbook posting must not silently skip; abort the sale transaction.
+        throw ledgerError;
       }
 
       if (built.customer) {
@@ -862,7 +889,7 @@ export async function listHeldCarts(scope: StockScope) {
     ...cart,
     customerName: cart.customer
       ? byId.get(cart.customer.toString())?.name ?? "Customer"
-      : "Walk-in customer",
+      : "Walk-in Customer",
     itemCount: cart.cartItems.reduce((sum, item) => sum + item.quantity, 0),
   }));
 }

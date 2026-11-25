@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { Business } from "@/models/Business";
 import { BusinessSettings } from "@/models/BusinessSettings";
 import { Category } from "@/models/Category";
@@ -100,8 +101,8 @@ async function bootstrapTenant() {
 }
 
 async function runLegacyMigrations(
-  businessId: { toString(): string },
-  storeId: { toString(): string },
+  businessId: Types.ObjectId,
+  storeId: Types.ObjectId,
 ) {
   const ownership = {
     businessId,
@@ -127,6 +128,33 @@ async function runLegacyMigrations(
     ),
     Order.updateMany(missingBusiness, { $set: ownership }),
   ]);
+
+  // Backfill phoneNormalized / customerType for older customer documents.
+  const legacyCustomers = await Customer.find({
+    $or: [
+      { phoneNormalized: { $exists: false } },
+      { phoneNormalized: "" },
+      { phoneNormalized: null },
+      { customerType: { $exists: false } },
+    ],
+  })
+    .select("_id phone customerType city state pincode")
+    .lean();
+
+  for (const row of legacyCustomers) {
+    await Customer.collection.updateOne(
+      { _id: row._id },
+      {
+        $set: {
+          phoneNormalized: String(row.phone ?? "").replace(/\D/g, ""),
+          customerType: row.customerType || "INDIVIDUAL",
+          city: row.city || "",
+          state: row.state || "",
+          pincode: row.pincode || "",
+        },
+      },
+    );
+  }
 
   await BusinessSettings.findOneAndUpdate(
     { businessId },
